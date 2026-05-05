@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 const PMS_API_URL = "https://pms-backend-kohl.vercel.app/api/v1/external/patients"
-const PMS_API_KEY = process.env.PMS_API_KEY || "sk_live_8iV22OVqJBGqfdEbirLTC5gmnxdgw6fD"
+const PMS_API_KEY = process.env.PMS_API_KEY
 
 export interface ExternalPatient {
   patient_id: string
