@@ -318,19 +318,26 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
                       <TableCell className="max-w-[200px] truncate">{invoice.diagnosis}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          {(invoice.items || []).slice(0, 2).map((item) => (
-                            <Badge key={item.medicineId} variant="secondary" className="text-xs">
-                              {item.medicineName}
-                            </Badge>
-                          ))}
-                          {(invoice.items || []).length > 2 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{(invoice.items || []).length - 2} more
-                            </Badge>
-                          )}
-                          {(!invoice.items || invoice.items.length === 0) && (
-                            <span className="text-muted-foreground text-xs">No items</span>
-                          )}
+                          {(() => {
+                            const uniqueMedicines = [...new Map((invoice.items || []).map(item => [item.medicineName, item])).values()]
+                            return (
+                              <>
+                                {uniqueMedicines.slice(0, 2).map((item) => (
+                                  <Badge key={item.medicineId} variant="secondary" className="text-xs">
+                                    {item.medicineName}
+                                  </Badge>
+                                ))}
+                                {uniqueMedicines.length > 2 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +{uniqueMedicines.length - 2} more
+                                  </Badge>
+                                )}
+                                {uniqueMedicines.length === 0 && (
+                                  <span className="text-muted-foreground text-xs">No items</span>
+                                )}
+                              </>
+                            )
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-medium">
