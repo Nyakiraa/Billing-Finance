@@ -6,7 +6,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import useSWR from "swr"
+import { useState } from "react"
+import { RecentBillsSection } from "./recent-bills"
+import { BillDetailsModal } from "./bill-details-modal"
 import type { InvoicesApiResponse, PatientsApiResponse } from "@/lib/types"
+import type { BillRecord } from "@/lib/billing/types"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -26,14 +30,24 @@ function formatDate(dateString: string): string {
 }
 
 export function DashboardView() {
+  const [selectedBill, setSelectedBill] = useState<BillRecord | null>(null)
+
   const { data: invoicesData, isLoading: invoicesLoading, mutate: mutateInvoices } = useSWR<InvoicesApiResponse>(
     "/api/invoices?limit=50",
-    fetcher
+    fetcher,
+    { revalidateInterval: 30000 } // Auto-refresh every 30 seconds
   )
 
   const { data: patientsData, isLoading: patientsLoading, mutate: mutatePatients } = useSWR<PatientsApiResponse>(
     "/api/patients?limit=50",
-    fetcher
+    fetcher,
+    { revalidateInterval: 30000 } // Auto-refresh every 30 seconds
+  )
+
+  const { data: billsData, isLoading: billsLoading } = useSWR<{ data: BillRecord[] }>(
+    "/api/bills",
+    fetcher,
+    { revalidateInterval: 30000 } // Auto-refresh every 30 seconds
   )
 
   const invoices = invoicesData?.data?.invoices || []
@@ -94,6 +108,7 @@ export function DashboardView() {
   }
 
   const isLoading = invoicesLoading || patientsLoading
+  const bills = billsData?.data || []
 
   return (
     <div className="space-y-6">
@@ -139,6 +154,12 @@ export function DashboardView() {
           )
         })}
       </div>
+
+      <RecentBillsSection 
+        bills={bills} 
+        isLoading={billsLoading} 
+        onSelectBill={setSelectedBill} 
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
@@ -238,6 +259,10 @@ export function DashboardView() {
           </CardContent>
         </Card>
       </div>
+
+      {selectedBill && (
+        <BillDetailsModal bill={selectedBill} onClose={() => setSelectedBill(null)} />
+      )}
     </div>
   )
 }
