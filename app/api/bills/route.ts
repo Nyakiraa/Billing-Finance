@@ -12,7 +12,10 @@ export async function GET(request: NextRequest) {
     const limit = searchParams.get("limit") || "20";
     const patientId = searchParams.get("patient_id");
 
-    // Try to fetch from PMS backend first
+    // Get local bills first (includes newly created bills)
+    const localBills = listBills();
+
+    // Try to fetch from PMS backend
     if (PMS_BASE_URL && PMS_API_KEY) {
       try {
         const url = new URL(`${PMS_BASE_URL}/bills`);
@@ -32,15 +35,22 @@ export async function GET(request: NextRequest) {
 
         if (response.ok) {
           const data = await response.json();
-          return NextResponse.json(data);
+          // Merge PMS bills with local bills (local bills take precedence)
+          const pmsBills = data.data || [];
+          const localBillIds = new Set(localBills.map((b) => b.bill_id));
+          const mergedBills = [
+            ...localBills,
+            ...pmsBills.filter((b: any) => !localBillIds.has(b.bill_id)),
+          ];
+          return NextResponse.json({ data: mergedBills });
         }
       } catch (externalError) {
-        console.warn("[v0] Failed to fetch from PMS backend, falling back to local data:", externalError);
+        console.warn("[v0] Failed to fetch from PMS backend, using local data:", externalError);
       }
     }
 
-    // Fallback to local mock data
-    return NextResponse.json({ data: listBills() }, { status: 200 });
+    // Return local bills as fallback
+    return NextResponse.json({ data: localBills }, { status: 200 });
   } catch (error) {
     console.error("[v0] Error in bills API:", error);
     return NextResponse.json(

@@ -23,7 +23,6 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction, onBillCrea
   const saveBill = async (receiptData: Receipt) => {
     try {
       setIsSaving(true)
-      const now = new Date()
       const servicesFromLineItems = invoice.line_items?.map((item) => item.item_name) || ["General Consultation"]
       const billData = {
         bill_id: receiptData.receipt_id,
@@ -54,11 +53,12 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction, onBillCrea
       })
 
       if (response.ok) {
-        console.log("[v0] Bill saved successfully")
         // Trigger refresh of bills data in dashboard
+        if (typeof window !== "undefined" && (window as any).__mutateBills) {
+          await (window as any).__mutateBills()
+        }
+        // Call the callback to navigate to dashboard
         onBillCreated?.()
-      } else {
-        console.error("[v0] Failed to save bill:", await response.text())
       }
     } catch (error) {
       console.error("[v0] Error saving bill:", error)

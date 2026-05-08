@@ -44,14 +44,20 @@ export function DashboardView() {
     { revalidateInterval: 30000 } // Auto-refresh every 30 seconds
   )
 
-  const { data: billsData, isLoading: billsLoading } = useSWR<{ data: BillRecord[] }>(
+  const { data: billsData, isLoading: billsLoading, mutate: mutateBills } = useSWR<{ data: BillRecord[] }>(
     "/api/bills",
     fetcher,
     { revalidateInterval: 30000 } // Auto-refresh every 30 seconds
   )
 
+  // Expose mutate function globally for bill creation callback
+  if (typeof window !== "undefined") {
+    (window as any).__mutateBills = mutateBills
+  }
+
   const invoices = invoicesData?.data?.invoices || []
   const patients = patientsData?.data?.patients || []
+  const bills = billsData?.data || []
 
   // Calculate stats from real data
   const totalRevenue = invoices
@@ -61,12 +67,13 @@ export function DashboardView() {
   const pendingInvoices = invoices.filter((inv) => inv.status === "pending")
   const pendingAmount = pendingInvoices.reduce((sum, inv) => sum + inv.total_amount, 0)
 
-  const paidToday = invoices.filter((inv) => {
-    const invoiceDate = new Date(inv.invoice_date).toDateString()
-    const today = new Date().toDateString()
-    return inv.status === "paid" && invoiceDate === today
+  // Payments Today - calculated from generated bills
+  const today = new Date().toDateString()
+  const paidToday = bills.filter((bill) => {
+    const billDate = new Date(bill.billing_date).toDateString()
+    return bill.payment_status === "Paid" && billDate === today
   })
-  const paidTodayAmount = paidToday.reduce((sum, inv) => sum + inv.total_amount, 0)
+  const paidTodayAmount = paidToday.reduce((sum, bill) => sum + bill.total_amount, 0)
 
   const totalPatients = patientsData?.pagination?.total || patients.length
   const activePatients = patients.filter((p) => p.status === "active").length
@@ -108,7 +115,6 @@ export function DashboardView() {
   }
 
   const isLoading = invoicesLoading || patientsLoading
-  const bills = billsData?.data || []
 
   return (
     <div className="space-y-6">
