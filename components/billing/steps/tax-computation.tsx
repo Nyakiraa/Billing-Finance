@@ -23,9 +23,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatCurrency } from "@/lib/mock-data"
-import type { ChargeEntry, TaxComputation as TaxComputationType } from "@/lib/types"
+import type { Patient, ChargeEntry, TaxComputation as TaxComputationType } from "@/lib/types"
 
 interface TaxComputationProps {
+  patient: Patient
   chargeEntry: ChargeEntry
   taxComputation: TaxComputationType | null
   onUpdateTaxComputation: (computation: TaxComputationType) => void
@@ -36,6 +37,7 @@ interface TaxComputationProps {
 const TAX_RATE = 0.12 // 12% VAT
 
 export function TaxComputation({
+  patient,
   chargeEntry,
   taxComputation,
   onUpdateTaxComputation,
@@ -45,12 +47,13 @@ export function TaxComputation({
   const [discountType, setDiscountType] = useState<"None" | "Senior" | "PWD" | "Promo">(
     taxComputation?.discount_type || "None"
   )
-  const [insuranceCoverage, setInsuranceCoverage] = useState(
-    taxComputation?.insurance_coverage || 5000
-  )
   const [isDataComplete, setIsDataComplete] = useState(true)
 
   const subtotal = chargeEntry.subtotal
+  
+  // Calculate insurance coverage based on patient's coverage percentage
+  const insuranceCoveragePercentage = patient.insurance_coverage_percentage || 0
+  const insuranceProvider = patient.insurance_provider || "Self-Pay"
 
   // Calculate discount based on type
   const getDiscountAmount = () => {
@@ -69,6 +72,8 @@ export function TaxComputation({
   const discountedSubtotal = subtotal - discountAmount
   const taxAmount = discountedSubtotal * TAX_RATE
   const totalBeforeInsurance = discountedSubtotal + taxAmount
+  // Insurance coverage is a percentage of the total before insurance
+  const insuranceCoverage = (totalBeforeInsurance * insuranceCoveragePercentage) / 100
   const totalAmountDue = Math.max(0, totalBeforeInsurance - insuranceCoverage)
 
   useEffect(() => {

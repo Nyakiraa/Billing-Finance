@@ -7,7 +7,6 @@ import {
   FileText,
   CreditCard,
   ShieldCheck,
-  BarChart3,
 } from "lucide-react"
 
 interface SidebarProps {
@@ -21,7 +20,6 @@ const menuItems = [
   { id: "invoices", label: "Invoices", icon: FileText },
   { id: "payments", label: "Payments", icon: CreditCard },
   { id: "insurance", label: "Insurance Claims", icon: ShieldCheck },
-  { id: "reports", label: "Reports", icon: BarChart3 },
 ]
 
 export function Sidebar({ activeItem, onItemClick }: SidebarProps) {

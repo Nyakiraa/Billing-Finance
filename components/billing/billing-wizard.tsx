@@ -91,8 +91,9 @@ export function BillingWizard() {
           />
         ) : null
       case 3:
-        return chargeEntry ? (
+        return chargeEntry && selectedPatient ? (
           <TaxComputation
+            patient={selectedPatient}
             chargeEntry={chargeEntry}
             taxComputation={taxComputation}
             onUpdateTaxComputation={handleUpdateTaxComputation}

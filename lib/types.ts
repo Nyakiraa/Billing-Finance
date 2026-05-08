@@ -107,6 +107,8 @@ export interface Patient {
   status: string
   ward_room: string
   insurance_provider: string
+  insurance_coverage_percentage: number
+  insurance_policy_number: string
   attending_physician: string
 }
 

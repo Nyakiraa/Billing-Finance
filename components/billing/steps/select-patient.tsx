@@ -37,6 +37,8 @@ function mapExternalToPatient(external: ExternalPatient): Patient {
     status: external.status || "active",
     ward_room: external.address || "N/A",
     insurance_provider: external.insurance?.provider || "Self-Pay",
+    insurance_coverage_percentage: external.insurance?.coverage_percentage || 0,
+    insurance_policy_number: external.insurance?.policy_number || "N/A",
     attending_physician: external.attending_physician || "N/A",
   }
 }
@@ -186,7 +188,10 @@ export function SelectPatient({ selectedPatient, onSelectPatient, onNext }: Sele
                           <Button
                             size="sm"
                             variant={selectedPatient?.patient_id === patient.patient_id ? "default" : "outline"}
-                            onClick={() => onSelectPatient(patient)}
+                            onClick={() => {
+                              onSelectPatient(patient)
+                              onNext()
+                            }}
                           >
                             {selectedPatient?.patient_id === patient.patient_id ? "Selected" : "Select"}
                           </Button>

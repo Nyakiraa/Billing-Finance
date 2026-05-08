@@ -8,15 +8,12 @@ import { DashboardView } from "@/components/billing/views/dashboard"
 import { InvoicesView } from "@/components/billing/views/invoices"
 import { PaymentsView } from "@/components/billing/views/payments"
 import { InsuranceView } from "@/components/billing/views/insurance"
-import { ReportsView } from "@/components/billing/views/reports"
-
 const viewTitles: Record<string, string> = {
   dashboard: "Dashboard",
   "new-bill": "New Bill",
   invoices: "Invoices",
   payments: "Payments",
   insurance: "Insurance Claims",
-  reports: "Reports",
 }
 
 export default function BillingPage() {
@@ -34,8 +31,6 @@ export default function BillingPage() {
         return <PaymentsView />
       case "insurance":
         return <InsuranceView />
-      case "reports":
-        return <ReportsView />
       default:
         return <BillingWizard />
     }

@@ -25,11 +25,9 @@ import {
 } from "@/components/ui/table"
 import {
   mockPhysicians,
-  mockServicesFromAdmin,
-  mockDoctorFeesFromStaffMgmt,
   formatCurrency,
 } from "@/lib/mock-data"
-import type { Patient, ChargeEntry as ChargeEntryType, LineItem, InvoicesApiResponse, ExternalInvoice, ExternalInvoiceItem } from "@/lib/types"
+import type { Patient, ChargeEntry as ChargeEntryType, LineItem, InvoicesApiResponse, ExternalInvoice } from "@/lib/types"
 
 interface ChargeEntryProps {
   patient: Patient
@@ -48,7 +46,6 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
   const [dateOfAdmission, setDateOfAdmission] = useState(chargeEntry?.date_of_admission || "2024-03-20")
   const [dateOfDischarge, setDateOfDischarge] = useState(chargeEntry?.date_of_discharge || "2024-03-23")
   const [lineItems, setLineItems] = useState<LineItem[]>(chargeEntry?.line_items || [])
-  const [selectedInvoice, setSelectedInvoice] = useState<ExternalInvoice | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
   // Fetch invoices for the selected patient
@@ -60,38 +57,29 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
 
   const patientInvoices = invoicesData?.data?.invoices || []
 
-  // Convert items from invoice to line items with unique IDs
-  const convertItemsToLineItems = (invoice: ExternalInvoice): LineItem[] => {
-    if (!invoice.items || invoice.items.length === 0) {
-      return []
+  // Auto-load all patient invoices into line items when data is available
+  useEffect(() => {
+    if (patientInvoices.length > 0 && lineItems.length === 0) {
+      const allMedicineItems: LineItem[] = []
+      patientInvoices.forEach((invoice, invoiceIndex) => {
+        if (invoice.items && invoice.items.length > 0) {
+          invoice.items.forEach((item, itemIndex) => {
+            allMedicineItems.push({
+              id: `${invoice.invoice_id}-${item.medicineId}-${itemIndex}-${invoiceIndex}`,
+              category: "medication" as const,
+              item_name: `${item.medicineName} (${item.prescribedDosage})`,
+              quantity: item.prescribedQuantity,
+              unit_price: item.unitPrice,
+              total: item.totalPrice,
+            })
+          })
+        }
+      })
+      if (allMedicineItems.length > 0) {
+        setLineItems(allMedicineItems)
+      }
     }
-    return invoice.items.map((item, index) => ({
-      id: `${invoice.invoice_id}-${item.medicineId}-${index}-${Date.now()}`,
-      category: "medication" as const,
-      item_name: `${item.medicineName} (${item.prescribedDosage})`,
-      quantity: item.prescribedQuantity,
-      unit_price: item.unitPrice,
-      total: item.totalPrice,
-    }))
-  }
-
-  // Load items from selected invoice - appends medicines to existing line items
-  const loadItemsFromInvoice = (invoice: ExternalInvoice) => {
-    setSelectedInvoice(invoice)
-    const medicineItems = convertItemsToLineItems(invoice)
-    
-    // Add default services and doctor fees if no existing line items
-    if (lineItems.length === 0) {
-      setLineItems([
-        ...mockServicesFromAdmin.slice(0, 2),
-        ...medicineItems,
-        ...mockDoctorFeesFromStaffMgmt.slice(0, 1),
-      ])
-    } else {
-      // Append new medicine items to existing line items
-      setLineItems([...lineItems, ...medicineItems])
-    }
-  }
+  }, [patientInvoices, lineItems.length])
 
   // Update billing status on the external PMS system
   const updateBillingStatus = async (invoiceId: string, newStatus: "pending" | "paid" | "cancelled" | "refunded") => {
@@ -106,9 +94,6 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
       if (response.ok) {
         // Refresh the invoices data
         mutate()
-        if (selectedInvoice?.invoice_id === invoiceId) {
-          setSelectedInvoice({ ...selectedInvoice, status: newStatus })
-        }
       } else {
         console.error("Failed to update billing status")
       }
@@ -297,22 +282,18 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
             <div className="rounded-lg border border-border overflow-hidden">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/50">
+                    <TableRow className="bg-muted/50">
                     <TableHead>Invoice ID</TableHead>
                     <TableHead>Diagnosis</TableHead>
                     <TableHead>Medicines</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Update Status</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {patientInvoices.map((invoice) => (
-                    <TableRow 
-                      key={invoice.invoice_id}
-                      className={selectedInvoice?.invoice_id === invoice.invoice_id ? "bg-primary/5" : ""}
-                    >
+                    <TableRow key={invoice.invoice_id}>
                       <TableCell className="font-mono text-sm">{invoice.invoice_id}</TableCell>
                       <TableCell className="max-w-[200px] truncate">{invoice.diagnosis}</TableCell>
                       <TableCell>
@@ -363,15 +344,6 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
                             <SelectItem value="refunded">Refunded</SelectItem>
                           </SelectContent>
                         </Select>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant={selectedInvoice?.invoice_id === invoice.invoice_id ? "default" : "outline"}
-                          onClick={() => loadItemsFromInvoice(invoice)}
-                        >
-                          {selectedInvoice?.invoice_id === invoice.invoice_id ? "Loaded" : "Load"}
-                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
