@@ -60,13 +60,13 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
 
   const patientInvoices = invoicesData?.data?.invoices || []
 
-  // Convert items from invoice to line items
+  // Convert items from invoice to line items with unique IDs
   const convertItemsToLineItems = (invoice: ExternalInvoice): LineItem[] => {
     if (!invoice.items || invoice.items.length === 0) {
       return []
     }
-    return invoice.items.map((item) => ({
-      id: item.medicineId,
+    return invoice.items.map((item, index) => ({
+      id: `${invoice.invoice_id}-${item.medicineId}-${index}-${Date.now()}`,
       category: "medication" as const,
       item_name: `${item.medicineName} (${item.prescribedDosage})`,
       quantity: item.prescribedQuantity,
@@ -75,7 +75,7 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
     }))
   }
 
-  // Load items from selected invoice
+  // Load items from selected invoice - appends medicines to existing line items
   const loadItemsFromInvoice = (invoice: ExternalInvoice) => {
     setSelectedInvoice(invoice)
     const medicineItems = convertItemsToLineItems(invoice)
@@ -88,9 +88,8 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
         ...mockDoctorFeesFromStaffMgmt.slice(0, 1),
       ])
     } else {
-      // Replace only medication items
-      const nonMedicationItems = lineItems.filter(item => item.category !== "medication")
-      setLineItems([...nonMedicationItems, ...medicineItems])
+      // Append new medicine items to existing line items
+      setLineItems([...lineItems, ...medicineItems])
     }
   }
 

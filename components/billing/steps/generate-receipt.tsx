@@ -17,10 +17,29 @@ interface GenerateReceiptProps {
 export function GenerateReceipt({ invoice, payment, onNewTransaction }: GenerateReceiptProps) {
   const [receipt, setReceipt] = useState<Receipt | null>(null)
 
+  // Send audit log to admin system
+  const sendAuditLog = async (receiptData: Receipt) => {
+    try {
+      await fetch("/api/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: "billing-system",
+          action_type: "RECORD_CREATED",
+          details: `Receipt ${receiptData.receipt_id} generated for patient ${receiptData.patient_name}. Invoice: ${receiptData.invoice_id}. Amount: ${receiptData.amount_paid}. Payment method: ${receiptData.payment_method}.`,
+          ip_addr: "0.0.0.0",
+          subsystem: "Billing",
+        }),
+      })
+    } catch (error) {
+      console.error("Failed to send audit log:", error)
+    }
+  }
+
   useEffect(() => {
     if (!receipt) {
       const now = new Date()
-      setReceipt({
+      const newReceipt: Receipt = {
         receipt_id: generateReceiptId(),
         patient_name: invoice.patient_name,
         invoice_id: invoice.invoice_id,
@@ -30,7 +49,11 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
         processed_by: "Admin User",
         balance_remaining: 0,
         status: "Paid",
-      })
+      }
+      setReceipt(newReceipt)
+      
+      // Send audit log when receipt is generated
+      sendAuditLog(newReceipt)
     }
   }, [receipt, invoice, payment])
 
