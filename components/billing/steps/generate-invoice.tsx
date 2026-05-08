@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { Download, CreditCard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -166,8 +166,8 @@ export function GenerateInvoice({
                 </TableHeader>
                 <TableBody>
                   {Object.entries(groupedItems).map(([category, items]) => (
-                    <>
-                      <TableRow key={category} className="bg-muted/30">
+                    <Fragment key={category}>
+                      <TableRow className="bg-muted/30">
                         <TableCell colSpan={4} className="font-semibold text-primary">
                           {getCategoryLabel(category)}
                         </TableCell>
@@ -180,7 +180,7 @@ export function GenerateInvoice({
                           <TableCell className="text-right font-medium">{formatCurrency(item.total)}</TableCell>
                         </TableRow>
                       ))}
-                    </>
+                    </Fragment>
                   ))}
                 </TableBody>
               </Table>

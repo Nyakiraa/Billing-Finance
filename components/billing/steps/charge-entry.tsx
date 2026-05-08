@@ -319,7 +319,6 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
                         <Select
                           value={invoice.status}
                           onValueChange={(value) => updateBillingStatus(invoice.invoice_id, value as "pending" | "paid" | "cancelled" | "refunded")}
-                          disabled={updatingStatus}
                         >
                           <SelectTrigger className="w-[120px] h-8">
                             <SelectValue />

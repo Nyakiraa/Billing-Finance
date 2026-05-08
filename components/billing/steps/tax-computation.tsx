@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Fragment, useState, useEffect } from "react"
 import { AlertTriangle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -123,6 +123,29 @@ export function TaxComputation({
     {} as Record<string, typeof chargeEntry.line_items>
   )
 
+  const groupedSummaryItems = Object.entries(groupedItems).reduce(
+    (acc, [category, items]) => {
+      const merged = items.reduce(
+        (map, item) => {
+          const key = `${item.item_name}::${item.unit_price}`
+          const existing = map.get(key)
+          if (existing) {
+            existing.quantity += item.quantity
+            existing.total += item.total
+          } else {
+            map.set(key, { ...item })
+          }
+          return map
+        },
+        new Map<string, (typeof items)[number]>()
+      )
+
+      acc[category] = Array.from(merged.values())
+      return acc
+    },
+    {} as Record<string, typeof chargeEntry.line_items>
+  )
+
   return (
     <div className="space-y-6">
       {!isDataComplete && (
@@ -154,9 +177,9 @@ export function TaxComputation({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {Object.entries(groupedItems).map(([category, items]) => (
-                  <>
-                    <TableRow key={category} className="bg-muted/30">
+                {Object.entries(groupedSummaryItems).map(([category, items]) => (
+                  <Fragment key={category}>
+                    <TableRow className="bg-muted/30">
                       <TableCell colSpan={5} className="font-semibold">
                         {getCategoryLabel(category)}
                       </TableCell>
@@ -170,7 +193,7 @@ export function TaxComputation({
                         <TableCell className="text-right font-medium">{formatCurrency(item.total)}</TableCell>
                       </TableRow>
                     ))}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -205,8 +228,9 @@ export function TaxComputation({
                 <Input
                   type="number"
                   value={insuranceCoverage}
-                  onChange={(e) => setInsuranceCoverage(Number(e.target.value))}
                   min="0"
+                  disabled
+                  className="bg-muted"
                 />
               </div>
             </div>

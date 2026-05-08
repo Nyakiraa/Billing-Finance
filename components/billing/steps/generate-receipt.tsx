@@ -59,6 +59,8 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
 
   if (!receipt) return null
 
+  const billId = receipt.invoice_id.replace(/^INV-/, "BILL-")
+
   const formatDateTime = (isoString: string) => {
     const date = new Date(isoString)
     return date.toLocaleString("en-PH", {
@@ -100,8 +102,8 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
           <div className="p-6 space-y-4">
             <div className="flex justify-between items-center pb-4 border-b border-dashed border-border">
               <div>
-                <span className="text-sm text-muted-foreground">Receipt No.</span>
-                <p className="font-mono font-bold text-lg">{receipt.receipt_id}</p>
+                <span className="text-sm text-muted-foreground">Bill ID</span>
+                <p className="font-mono font-bold text-lg">{billId}</p>
               </div>
               <Badge className="bg-green-500 hover:bg-green-600 text-white text-sm px-4 py-1">
                 PAID
@@ -114,8 +116,8 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
                 <span className="font-medium">{receipt.patient_name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Invoice ID</span>
-                <span className="font-mono text-sm">{receipt.invoice_id}</span>
+                <span className="text-muted-foreground">Bill ID</span>
+                <span className="font-mono text-sm">{billId}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Date & Time</span>
