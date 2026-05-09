@@ -35,19 +35,19 @@ export function DashboardView() {
   const { data: invoicesData, isLoading: invoicesLoading, mutate: mutateInvoices } = useSWR<InvoicesApiResponse>(
     "/api/invoices?limit=50",
     fetcher,
-    { revalidateInterval: 30000 } // Auto-refresh every 30 seconds
+    { refreshInterval: 30000 } // Auto-refresh every 30 seconds
   )
 
   const { data: patientsData, isLoading: patientsLoading, mutate: mutatePatients } = useSWR<PatientsApiResponse>(
     "/api/patients?limit=50",
     fetcher,
-    { revalidateInterval: 30000 } // Auto-refresh every 30 seconds
+    { refreshInterval: 30000 } // Auto-refresh every 30 seconds
   )
 
   const { data: billsData, isLoading: billsLoading, mutate: mutateBills } = useSWR<{ data: BillRecord[] }>(
     "/api/bills",
     fetcher,
-    { revalidateInterval: 30000 } // Auto-refresh every 30 seconds
+    { refreshInterval: 30000 } // Auto-refresh every 30 seconds
   )
 
   // Expose mutate function globally for bill creation callback

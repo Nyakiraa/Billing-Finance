@@ -202,12 +202,9 @@ export function TaxComputation({
 
               <div className="space-y-2">
                 <Label>Insurance Coverage</Label>
-                <Input
-                  type="number"
-                  value={insuranceCoverage}
-                  onChange={(e) => setInsuranceCoverage(Number(e.target.value))}
-                  min="0"
-                />
+                <div className="px-3 py-2 rounded-md border border-input bg-background text-sm">
+                  {formatCurrency(insuranceCoverage)}
+                </div>
               </div>
             </div>
 
