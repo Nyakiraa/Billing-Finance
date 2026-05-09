@@ -12,10 +12,60 @@ interface GenerateReceiptProps {
   invoice: Invoice
   payment: Payment
   onNewTransaction: () => void
+  onBillCreated?: () => void
 }
 
-export function GenerateReceipt({ invoice, payment, onNewTransaction }: GenerateReceiptProps) {
+export function GenerateReceipt({ invoice, payment, onNewTransaction, onBillCreated }: GenerateReceiptProps) {
   const [receipt, setReceipt] = useState<Receipt | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Save bill to API
+  const saveBill = async (receiptData: Receipt) => {
+    try {
+      setIsSaving(true)
+      const servicesFromLineItems = invoice.line_items?.map((item) => item.item_name) || ["General Consultation"]
+      const billData = {
+        bill_id: receiptData.receipt_id,
+        patient_id: invoice.patient_id || "unknown",
+        patient_name: receiptData.patient_name,
+        visit_date: invoice.date_issued,
+        services_rendered: servicesFromLineItems,
+        total_amount: receiptData.amount_paid,
+        insurance_provider: "Not Specified",
+        insurance_coverage: invoice.insurance_coverage || 0,
+        patient_balance: receiptData.balance_remaining || 0,
+        payment_method: receiptData.payment_method,
+        payment_status: receiptData.status,
+        billing_date: invoice.date_issued,
+        due_date: invoice.due_date,
+        is_insurance_claimed: false,
+        attending_doctor_id: "unknown",
+      }
+      
+      const response = await fetch("/api/bills", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "x-actor-id": "billing-system",
+          "x-actor-role": "billing_staff",
+        },
+        body: JSON.stringify(billData),
+      })
+
+      if (response.ok) {
+        // Trigger refresh of bills data in dashboard
+        if (typeof window !== "undefined" && (window as any).__mutateBills) {
+          await (window as any).__mutateBills()
+        }
+        // Call the callback to navigate to dashboard
+        onBillCreated?.()
+      }
+    } catch (error) {
+      console.error("[v0] Error saving bill:", error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   // Send audit log to admin system
   const sendAuditLog = async (receiptData: Receipt) => {
@@ -52,7 +102,8 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
       }
       setReceipt(newReceipt)
       
-      // Send audit log when receipt is generated
+      // Save bill to database and send audit log
+      saveBill(newReceipt)
       sendAuditLog(newReceipt)
     }
   }, [receipt, invoice, payment])

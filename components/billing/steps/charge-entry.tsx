@@ -295,7 +295,7 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
                   {patientInvoices.map((invoice) => (
                     <TableRow key={invoice.invoice_id}>
                       <TableCell className="font-mono text-sm">{invoice.invoice_id}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">{invoice.diagnosis}</TableCell>
+                      <TableCell className="max-w-[200px] truncate">{invoice.prescription_names?.[0] || "N/A"}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {(() => {

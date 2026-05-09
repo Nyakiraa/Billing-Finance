@@ -18,13 +18,20 @@ const viewTitles: Record<string, string> = {
 
 export default function BillingPage() {
   const [activeView, setActiveView] = useState("new-bill")
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+  const handleBillCreated = () => {
+    // Trigger refresh of bills data and navigate to dashboard
+    setRefreshTrigger((prev) => prev + 1)
+    setActiveView("dashboard")
+  }
 
   const renderView = () => {
     switch (activeView) {
       case "dashboard":
-        return <DashboardView />
+        return <DashboardView key={refreshTrigger} />
       case "new-bill":
-        return <BillingWizard />
+        return <BillingWizard onBillCreated={handleBillCreated} />
       case "invoices":
         return <InvoicesView />
       case "payments":

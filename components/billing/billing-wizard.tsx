@@ -25,7 +25,11 @@ const STEPS = [
   "Receipt",
 ]
 
-export function BillingWizard() {
+interface BillingWizardProps {
+  onBillCreated?: () => void
+}
+
+export function BillingWizard({ onBillCreated }: BillingWizardProps = {}) {
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [chargeEntry, setChargeEntry] = useState<ChargeEntryType | null>(null)
@@ -129,6 +133,7 @@ export function BillingWizard() {
             invoice={invoice}
             payment={payment}
             onNewTransaction={resetWizard}
+            onBillCreated={onBillCreated}
           />
         ) : null
       default:

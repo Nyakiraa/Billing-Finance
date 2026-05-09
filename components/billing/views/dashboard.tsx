@@ -6,7 +6,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import useSWR from "swr"
+import { useState } from "react"
+import { RecentBillsSection } from "./recent-bills"
+import { BillDetailsModal } from "./bill-details-modal"
 import type { InvoicesApiResponse, PatientsApiResponse } from "@/lib/types"
+import type { BillRecord } from "@/lib/billing/types"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -26,18 +30,34 @@ function formatDate(dateString: string): string {
 }
 
 export function DashboardView() {
+  const [selectedBill, setSelectedBill] = useState<BillRecord | null>(null)
+
   const { data: invoicesData, isLoading: invoicesLoading, mutate: mutateInvoices } = useSWR<InvoicesApiResponse>(
     "/api/invoices?limit=50",
-    fetcher
+    fetcher,
+    { refreshInterval: 30000 } // Auto-refresh every 30 seconds
   )
 
   const { data: patientsData, isLoading: patientsLoading, mutate: mutatePatients } = useSWR<PatientsApiResponse>(
     "/api/patients?limit=50",
-    fetcher
+    fetcher,
+    { refreshInterval: 30000 } // Auto-refresh every 30 seconds
   )
+
+  const { data: billsData, isLoading: billsLoading, mutate: mutateBills } = useSWR<{ data: BillRecord[] }>(
+    "/api/bills",
+    fetcher,
+    { refreshInterval: 30000 } // Auto-refresh every 30 seconds
+  )
+
+  // Expose mutate function globally for bill creation callback
+  if (typeof window !== "undefined") {
+    (window as any).__mutateBills = mutateBills
+  }
 
   const invoices = invoicesData?.data?.invoices || []
   const patients = patientsData?.data?.patients || []
+  const bills = billsData?.data || []
 
   // Calculate stats from real data
   const totalRevenue = invoices
@@ -47,12 +67,13 @@ export function DashboardView() {
   const pendingInvoices = invoices.filter((inv) => inv.status === "pending")
   const pendingAmount = pendingInvoices.reduce((sum, inv) => sum + inv.total_amount, 0)
 
-  const paidToday = invoices.filter((inv) => {
-    const invoiceDate = new Date(inv.invoice_date).toDateString()
-    const today = new Date().toDateString()
-    return inv.status === "paid" && invoiceDate === today
+  // Payments Today - calculated from generated bills
+  const today = new Date().toDateString()
+  const paidToday = bills.filter((bill) => {
+    const billDate = new Date(bill.billing_date).toDateString()
+    return bill.payment_status === "Paid" && billDate === today
   })
-  const paidTodayAmount = paidToday.reduce((sum, inv) => sum + inv.total_amount, 0)
+  const paidTodayAmount = paidToday.reduce((sum, bill) => sum + bill.total_amount, 0)
 
   const totalPatients = patientsData?.pagination?.total || patients.length
   const activePatients = patients.filter((p) => p.status === "active").length
@@ -139,6 +160,12 @@ export function DashboardView() {
           )
         })}
       </div>
+
+      <RecentBillsSection 
+        bills={bills} 
+        isLoading={billsLoading} 
+        onSelectBill={setSelectedBill} 
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
@@ -238,6 +265,10 @@ export function DashboardView() {
           </CardContent>
         </Card>
       </div>
+
+      {selectedBill && (
+        <BillDetailsModal bill={selectedBill} onClose={() => setSelectedBill(null)} />
+      )}
     </div>
   )
 }
