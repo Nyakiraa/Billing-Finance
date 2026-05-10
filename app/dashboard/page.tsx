@@ -41,12 +41,14 @@ export default function DashboardPage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-background flex flex-col">
-        <Header title={viewTitles[activeView] || "Dashboard"} />
         <div className="flex flex-1 min-h-0">
           <Sidebar activeItem={activeView} onItemClick={setActiveView} />
-          <main className="flex-1 p-6 overflow-auto min-h-0">
-            {renderView()}
-          </main>
+          <div className="flex-1 flex flex-col min-h-0">
+            <Header title={viewTitles[activeView] || "Dashboard"} />
+            <main className="flex-1 p-6 overflow-auto min-h-0">
+              {renderView()}
+            </main>
+          </div>
         </div>
       </div>
     </ProtectedRoute>

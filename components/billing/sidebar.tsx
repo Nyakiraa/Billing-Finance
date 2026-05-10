@@ -24,7 +24,7 @@ const menuItems = [
 
 export function Sidebar({ activeItem, onItemClick }: SidebarProps) {
   return (
-    <aside className="w-64 bg-sidebar text-sidebar-foreground flex flex-col sticky top-16 self-start h-[calc(100vh-4rem)] overflow-y-auto">
+    <aside className="w-64 bg-sidebar text-sidebar-foreground flex flex-col sticky top-0 self-start h-screen overflow-y-auto">
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-sidebar-primary rounded-lg flex items-center justify-center">
