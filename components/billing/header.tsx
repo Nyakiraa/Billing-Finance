@@ -66,11 +66,14 @@ export function Header({ title }: HeaderProps) {
 
   // Profile state
   const [profileData, setProfileData] = useState<ProfileData>({
-    fullName: "Admin User",
-    email: "admin@healthcare.com",
+    fullName: "Billing & Finance Admin",
+    email: "admin@billingfinance.com",
     role: "System Administrator",
     department: "Finance & Billing",
   })
+
+  // Current time and date state
+  const [currentTime, setCurrentTime] = useState(new Date())
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -83,6 +86,15 @@ export function Header({ title }: HeaderProps) {
     if (savedProfile) {
       setProfileData(JSON.parse(savedProfile))
     }
+  }, [])
+
+  // Update current time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 1000)
+
+    return () => clearInterval(timer)
   }, [])
 
   // Save settings to localStorage
@@ -106,16 +118,35 @@ export function Header({ title }: HeaderProps) {
       <h1 className="text-xl font-semibold text-foreground">{title}</h1>
 
       <div className="flex items-center gap-4">
+        {/* Current Date and Time */}
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground">
+            {currentTime.toLocaleDateString('en-US', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })}
+          </p>
+          <p className="text-sm font-medium">
+            {currentTime.toLocaleTimeString('en-US', { 
+              hour: '2-digit', 
+              minute: '2-digit', 
+              second: '2-digit' 
+            })}
+          </p>
+        </div>
+
         {/* Profile & Settings */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-2">
               <Avatar className="w-8 h-8">
                 <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                  AD
+                  BF
                 </AvatarFallback>
               </Avatar>
-              <span className="text-sm font-medium">Admin User</span>
+              <span className="text-sm font-medium">Billing & Finance Admin</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">

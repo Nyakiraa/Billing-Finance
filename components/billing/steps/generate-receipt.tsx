@@ -77,7 +77,7 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
         date_time: now.toISOString(),
         amount_paid: payment.amount_tendered >= invoice.total_amount_due ? invoice.total_amount_due : payment.amount_tendered,
         payment_method: payment.payment_method,
-        processed_by: "Admin User",
+        processed_by: "Billing & Finance Admin",
         balance_remaining: 0,
         status: "Paid",
       }
