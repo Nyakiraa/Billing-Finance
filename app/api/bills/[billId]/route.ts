@@ -8,6 +8,8 @@ import {
 } from "@/lib/billing/service";
 import { UpdateBillInput } from "@/lib/billing/types";
 
+export const runtime = "nodejs";
+
 interface RouteContext {
   params: Promise<{ billId: string }>;
 }
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   try {
     const { billId } = await context.params;
-    const bill = getBillOrThrow(billId);
+    const bill = await getBillOrThrow(billId);
     return NextResponse.json({ data: bill }, { status: 200, headers });
   } catch (error) {
     const { status, body } = formatServiceError(error);
@@ -62,7 +64,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
   try {
     const { billId } = await context.params;
-    const bill = voidBill(billId, {
+    const bill = await voidBill(billId, {
       actor_id: request.headers.get("x-actor-id") ?? "system",
       actor_role: request.headers.get("x-actor-role") ?? "billing_staff",
     });

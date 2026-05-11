@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { validateApiKey, unauthorizedResponse, getDeprecationWarningHeader } from "@/lib/auth"
 import { listInvoices, upsertInvoice } from "@/lib/invoices-store"
 
+export const runtime = "nodejs"
+
 // Invoice creation/storage endpoint
 export async function POST(request: NextRequest) {
   const authResult = validateApiKey(request, { routeName: "/api/invoices" })
@@ -57,7 +59,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Store the invoice
-    upsertInvoice(invoice)
+    await upsertInvoice(invoice)
 
     return NextResponse.json(
       {
@@ -99,7 +101,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Filter invoices based on query parameters
-    let filteredInvoices = listInvoices()
+    let filteredInvoices = await listInvoices()
 
     if (patientId) {
       filteredInvoices = filteredInvoices.filter(
@@ -166,7 +168,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Check if invoice exists
-    const invoice = listInvoices().find((inv) => inv.invoice_id === invoice_id)
+    const invoice = (await listInvoices()).find((inv) => inv.invoice_id === invoice_id)
     if (!invoice) {
       return NextResponse.json(
         {
@@ -183,7 +185,7 @@ export async function PATCH(request: NextRequest) {
     invoice.status = status
     invoice.updated_at = new Date().toISOString()
     invoice.updated_by = body.updated_by || "system"
-    upsertInvoice(invoice)
+    await upsertInvoice(invoice)
 
     return NextResponse.json({
       status: "success",

@@ -65,13 +65,13 @@ function makeAuditId(): string {
   return `AUD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }
 
-function addAuditEntry(
+async function addAuditEntry(
   billId: string,
   action: "CREATED" | "UPDATED" | "VOIDED" | "CLAIM_UPDATED",
   context: RequestContext,
   changes: Record<string, unknown>,
-): void {
-  appendAuditLog({
+): Promise<void> {
+  await appendAuditLog({
     audit_id: makeAuditId(),
     bill_id: billId,
     action,
@@ -191,12 +191,12 @@ function normalizeNewBill(input: CreateBillInput): BillRecord {
   };
 }
 
-export function listBills(): BillRecord[] {
-  return getAllBills();
+export async function listBills(): Promise<BillRecord[]> {
+  return await getAllBills();
 }
 
-export function getBillOrThrow(billId: string): BillRecord {
-  const bill = getBillById(billId);
+export async function getBillOrThrow(billId: string): Promise<BillRecord> {
+  const bill = await getBillById(billId);
   if (!bill) {
     throw new BillingServiceError(404, {
       status: "error",
@@ -257,7 +257,7 @@ async function validateDependencies(): Promise<void> {
 
 export async function createBill(payload: CreateBillInput, context: RequestContext): Promise<BillRecord> {
   await validateDependencies();
-  if (getBillById(payload.bill_id)) {
+  if (await getBillById(payload.bill_id)) {
     throw new BillingServiceError(409, {
       status: "error",
       error_code: "DUPLICATE_BILL",
@@ -268,7 +268,7 @@ export async function createBill(payload: CreateBillInput, context: RequestConte
       },
     });
   }
-  if (findBillByPatientAndVisit(payload.patient_id, payload.visit_date)) {
+  if (await findBillByPatientAndVisit(payload.patient_id, payload.visit_date)) {
     throw new BillingServiceError(409, {
       status: "error",
       error_code: "DUPLICATE_BILL",
@@ -280,8 +280,8 @@ export async function createBill(payload: CreateBillInput, context: RequestConte
     });
   }
   const normalized = normalizeNewBill(payload);
-  const saved = saveBill(normalized);
-  addAuditEntry(saved.bill_id, "CREATED", context, { created: true });
+  const saved = await saveBill(normalized);
+  await addAuditEntry(saved.bill_id, "CREATED", context, { created: true });
   return saved;
 }
 
@@ -291,7 +291,7 @@ export async function updateBill(
   context: RequestContext,
 ): Promise<BillRecord> {
   await validateDependencies();
-  const current = getBillOrThrow(billId);
+  const current = await getBillOrThrow(billId);
 
   if (payload.payment_status !== undefined && context.actor_role !== "billing_staff") {
     throw new BillingServiceError(403, {
@@ -312,32 +312,32 @@ export async function updateBill(
   };
 
   const normalized = normalizeNewBill(merged);
-  const saved = saveBill({
+  const saved = await saveBill({
     ...normalized,
     created_at: current.created_at,
     updated_at: nowIso(),
     is_voided: current.is_voided,
     voided_at: current.voided_at,
   });
-  addAuditEntry(billId, "UPDATED", context, payload as Record<string, unknown>);
+  await addAuditEntry(billId, "UPDATED", context, payload as Record<string, unknown>);
   return saved;
 }
 
-export function voidBill(billId: string, context: RequestContext): BillRecord {
-  const current = getBillOrThrow(billId);
+export async function voidBill(billId: string, context: RequestContext): Promise<BillRecord> {
+  const current = await getBillOrThrow(billId);
   const updated: BillRecord = {
     ...current,
     is_voided: true,
     voided_at: nowIso(),
     updated_at: nowIso(),
   };
-  const saved = saveBill(updated);
-  addAuditEntry(billId, "VOIDED", context, { is_voided: true });
+  const saved = await saveBill(updated);
+  await addAuditEntry(billId, "VOIDED", context, { is_voided: true });
   return saved;
 }
 
-export function markInsuranceClaimed(billId: string, context: RequestContext): BillRecord {
-  const bill = getBillOrThrow(billId);
+export async function markInsuranceClaimed(billId: string, context: RequestContext): Promise<BillRecord> {
+  const bill = await getBillOrThrow(billId);
   if (bill.insurance_provider.trim().length === 0) {
     throw new BillingServiceError(400, {
       status: "error",
@@ -359,14 +359,14 @@ export function markInsuranceClaimed(billId: string, context: RequestContext): B
     updated_at: nowIso(),
   };
 
-  const saved = saveBill(updated);
-  addAuditEntry(billId, "CLAIM_UPDATED", context, { is_insurance_claimed: true });
+  const saved = await saveBill(updated);
+  await addAuditEntry(billId, "CLAIM_UPDATED", context, { is_insurance_claimed: true });
   return saved;
 }
 
-export function listBillAuditTrail(billId: string) {
-  getBillOrThrow(billId);
-  return getAuditLogsByBillId(billId);
+export async function listBillAuditTrail(billId: string) {
+  await getBillOrThrow(billId);
+  return await getAuditLogsByBillId(billId);
 }
 
 export function formatServiceError(error: unknown): { status: number; body: ServiceErrorPayload } {

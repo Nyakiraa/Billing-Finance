@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { validateApiKey, unauthorizedResponse, getDeprecationWarningHeader } from "@/lib/auth"
 import { deleteInvoice, getInvoice } from "@/lib/invoices-store"
 
-// Note: In production, this would fetch from a database
-// For now, it references the in-memory store from the parent route
-// This is a temporary solution - replace with actual database queries
+export const runtime = "nodejs"
 
 export async function GET(request: NextRequest, context: RouteContext<"/api/invoices/[invoiceId]">) {
   const authResult = validateApiKey(request, { routeName: "/api/invoices/[invoiceId]", requireApiKey: false })
@@ -28,7 +26,7 @@ export async function GET(request: NextRequest, context: RouteContext<"/api/invo
       )
     }
 
-    const invoice = getInvoice(invoiceId)
+    const invoice = await getInvoice(invoiceId)
 
     if (!invoice) {
       return NextResponse.json(
@@ -87,7 +85,7 @@ export async function DELETE(request: NextRequest, context: RouteContext<"/api/i
       )
     }
 
-    const deleted = deleteInvoice(invoiceId)
+    const deleted = await deleteInvoice(invoiceId)
     if (!deleted) {
       return NextResponse.json(
         {

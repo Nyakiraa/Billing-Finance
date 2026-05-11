@@ -1,55 +1,129 @@
-import { AuditEntry, BillRecord } from "./types";
+import type { AuditEntry, BillRecord } from "./types";
+import { getDb } from "@/lib/db/sqlite";
 
-const bills = new Map<string, BillRecord>();
-const auditTrail: AuditEntry[] = [];
-
-const seededBill: BillRecord = {
-  bill_id: "BILL-2024-00389",
-  patient_id: "PAT-2024-00142",
-  patient_name: "Juan dela Cruz",
-  visit_date: "2024-03-22",
-  services_rendered: ["Consultation", "Blood Test", "X-Ray"],
-  total_amount: 4500,
-  insurance_provider: "PhilHealth",
-  insurance_coverage: 2000,
-  patient_balance: 2500,
-  payment_method: "Cash",
-  payment_status: "Paid",
-  billing_date: "2024-03-22",
-  due_date: "2024-04-05",
-  is_insurance_claimed: true,
-  attending_doctor_id: "DOC-0045",
-  is_voided: false,
-  voided_at: null,
-  created_at: "2024-03-22T00:00:00.000Z",
-  updated_at: "2024-03-22T00:00:00.000Z",
-};
-
-bills.set(seededBill.bill_id, seededBill);
-
-export function getAllBills(): BillRecord[] {
-  return [...bills.values()];
+function parseJsonArray<T>(value: unknown, fallback: T[]): T[] {
+  if (typeof value !== "string") return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
-export function getBillById(billId: string): BillRecord | undefined {
-  return bills.get(billId);
+function parseJsonObject(value: unknown, fallback: Record<string, unknown>): Record<string, unknown> {
+  if (typeof value !== "string") return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+    return fallback;
+  } catch {
+    return fallback;
+  }
 }
 
-export function saveBill(bill: BillRecord): BillRecord {
-  bills.set(bill.bill_id, bill);
-  return bill;
+function rowToBill(row: any): BillRecord {
+  return {
+    ...row,
+    services_rendered: parseJsonArray<string>(row.services_rendered, []),
+    is_insurance_claimed: Boolean(row.is_insurance_claimed),
+    is_voided: Boolean(row.is_voided),
+    voided_at: row.voided_at ?? null,
+  } as BillRecord;
 }
 
-export function findBillByPatientAndVisit(patientId: string, visitDate: string): BillRecord | undefined {
-  return [...bills.values()].find(
-    (bill) => bill.patient_id === patientId && bill.visit_date === visitDate && !bill.is_voided,
-  );
+export async function getAllBills(): Promise<BillRecord[]> {
+  const db = getDb();
+  const rows = db.prepare("SELECT * FROM bills ORDER BY created_at DESC").all();
+  return rows.map(rowToBill);
 }
 
-export function appendAuditLog(entry: AuditEntry): void {
-  auditTrail.push(entry);
+export async function getBillById(billId: string): Promise<BillRecord | undefined> {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM bills WHERE bill_id = ?").get(billId);
+  return row ? rowToBill(row) : undefined;
 }
 
-export function getAuditLogsByBillId(billId: string): AuditEntry[] {
-  return auditTrail.filter((entry) => entry.bill_id === billId);
+export async function saveBill(bill: BillRecord): Promise<BillRecord> {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO bills (
+      bill_id, patient_id, patient_name, visit_date, services_rendered,
+      total_amount, insurance_provider, insurance_coverage, patient_balance,
+      payment_method, payment_status, billing_date, due_date, is_insurance_claimed,
+      attending_doctor_id, is_voided, voided_at, created_at, updated_at
+    ) VALUES (
+      @bill_id, @patient_id, @patient_name, @visit_date, @services_rendered,
+      @total_amount, @insurance_provider, @insurance_coverage, @patient_balance,
+      @payment_method, @payment_status, @billing_date, @due_date, @is_insurance_claimed,
+      @attending_doctor_id, @is_voided, @voided_at, @created_at, @updated_at
+    )
+    ON CONFLICT(bill_id) DO UPDATE SET
+      patient_id=excluded.patient_id,
+      patient_name=excluded.patient_name,
+      visit_date=excluded.visit_date,
+      services_rendered=excluded.services_rendered,
+      total_amount=excluded.total_amount,
+      insurance_provider=excluded.insurance_provider,
+      insurance_coverage=excluded.insurance_coverage,
+      patient_balance=excluded.patient_balance,
+      payment_method=excluded.payment_method,
+      payment_status=excluded.payment_status,
+      billing_date=excluded.billing_date,
+      due_date=excluded.due_date,
+      is_insurance_claimed=excluded.is_insurance_claimed,
+      attending_doctor_id=excluded.attending_doctor_id,
+      is_voided=excluded.is_voided,
+      voided_at=excluded.voided_at,
+      created_at=excluded.created_at,
+      updated_at=excluded.updated_at
+  `);
+
+  stmt.run({
+    ...bill,
+    services_rendered: JSON.stringify(bill.services_rendered ?? []),
+    is_insurance_claimed: bill.is_insurance_claimed ? 1 : 0,
+    is_voided: bill.is_voided ? 1 : 0,
+    voided_at: bill.voided_at ?? null,
+  });
+
+  const saved = db.prepare("SELECT * FROM bills WHERE bill_id = ?").get(bill.bill_id);
+  if (!saved) throw new Error(`Failed to save bill ${bill.bill_id}`);
+  return rowToBill(saved);
+}
+
+export async function findBillByPatientAndVisit(
+  patientId: string,
+  visitDate: string,
+): Promise<BillRecord | undefined> {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT * FROM bills WHERE patient_id = ? AND visit_date = ? AND is_voided = 0 LIMIT 1")
+    .get(patientId, visitDate);
+  return row ? rowToBill(row) : undefined;
+}
+
+export async function appendAuditLog(entry: AuditEntry): Promise<void> {
+  const db = getDb();
+  db.prepare(
+    `
+      INSERT INTO bill_audits (audit_id, bill_id, action, actor_id, actor_role, timestamp, changes)
+      VALUES (@audit_id, @bill_id, @action, @actor_id, @actor_role, @timestamp, @changes)
+    `,
+  ).run({
+    ...entry,
+    changes: JSON.stringify(entry.changes ?? {}),
+  });
+}
+
+export async function getAuditLogsByBillId(billId: string): Promise<AuditEntry[]> {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT * FROM bill_audits WHERE bill_id = ? ORDER BY timestamp ASC")
+    .all(billId);
+
+  return rows.map((row: any) => ({
+    ...row,
+    changes: parseJsonObject(row.changes, {}),
+  })) as AuditEntry[];
 }

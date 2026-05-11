@@ -3,6 +3,8 @@ import { validateApiKey, unauthorizedResponse, getDeprecationWarningHeader } fro
 import { createBill, formatServiceError, listBills } from "@/lib/billing/service";
 import { CreateBillInput } from "@/lib/billing/types";
 
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
   const authResult = validateApiKey(request, { routeName: "/api/bills", requireApiKey: false });
   if (!authResult.isValid) {
@@ -10,7 +12,8 @@ export async function GET(request: NextRequest) {
   }
 
   const headers = authResult.requiresWarning ? getDeprecationWarningHeader() : {};
-  return NextResponse.json({ data: listBills() }, { status: 200, headers });
+  const bills = await listBills();
+  return NextResponse.json({ data: bills }, { status: 200, headers });
 }
 
 export async function POST(request: NextRequest) {
@@ -29,6 +32,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ data: bill }, { status: 201, headers });
   } catch (error) {
+    console.error("Error creating bill:", error);
     const { status, body } = formatServiceError(error);
     return NextResponse.json(body, { status, headers });
   }

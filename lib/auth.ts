@@ -38,7 +38,10 @@ function getKeyConfigForRoute(routeName: string | undefined): {
 
   // Default: invoices keyset
   return {
-    primaryKey: process.env.INVOICES_API_KEY_PROD || process.env.INVOICES_API_KEY,
+    primaryKey:
+      process.env.INVOICES_API_KEY_PROD ||
+      process.env.INVOICES_API_KEY ||
+      process.env.INVOICE_API_KEY,
     secondaryKey: process.env.INVOICES_API_KEY_SECONDARY,
     legacyKey: process.env.INVOICES_API_KEY_LEGACY || "sk_live_invoices_default_key_change_in_production",
   }
