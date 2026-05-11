@@ -102,7 +102,7 @@ export function ReceiptsView() {
     if (!q) return receipts
     return receipts.filter((receipt) => {
       return (
-        receipt.receipt_id.toLowerCase().includes(q) ||
+        receipt.bill_id.toLowerCase().includes(q) ||
         receipt.invoice_id.toLowerCase().includes(q) ||
         receipt.patient_name.toLowerCase().includes(q) ||
         receipt.patient_id.toLowerCase().includes(q)
@@ -144,7 +144,7 @@ export function ReceiptsView() {
               <div className="relative w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by receipt/invoice/patient..."
+                  placeholder="Search by bill ID or patient..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -173,8 +173,9 @@ export function ReceiptsView() {
                   <TableRow className="bg-muted/50">
                     <TableHead>Receipt ID</TableHead>
                     <TableHead>Patient</TableHead>
-                    <TableHead>Invoice ID</TableHead>
-                    <TableHead>Issued At</TableHead>
+                    <TableHead>Visit Date</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -190,17 +191,18 @@ export function ReceiptsView() {
                     filteredReceipts
                       .slice()
                       .sort((a, b) => new Date(b.issued_at).getTime() - new Date(a.issued_at).getTime())
-                      .map((receipt) => (
-                        <TableRow key={receipt.receipt_id}>
-                          <TableCell className="font-mono text-sm">{receipt.receipt_id}</TableCell>
+                      .map((receipt, index) => (
+                        <TableRow key={`${receipt.bill_id}-${receipt.invoice_id}-${receipt.issued_at}-${index}`}>
+                          <TableCell className="font-mono text-sm">{receipt.bill_id}</TableCell>
                           <TableCell>
                             <div className="space-y-0.5">
                               <p className="font-medium">{receipt.patient_name}</p>
                               <p className="text-xs text-muted-foreground font-mono">{receipt.patient_id}</p>
                             </div>
                           </TableCell>
-                          <TableCell className="font-mono text-sm">{receipt.invoice_id}</TableCell>
-                          <TableCell>{formatDateTime(receipt.issued_at)}</TableCell>
+                          <TableCell>{new Date(receipt.issued_at).toISOString().slice(0, 10)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(receipt.amount_paid)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(receipt.balance_remaining)}</TableCell>
                           <TableCell>
                             <Badge variant="outline">{receipt.status}</Badge>
                           </TableCell>
@@ -208,7 +210,7 @@ export function ReceiptsView() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => setSelectedReceiptId(receipt.receipt_id)}
+                              onClick={() => setSelectedReceiptId(receipt.bill_id)}
                               aria-label="View receipt"
                             >
                               <Eye className="w-4 h-4" />
@@ -229,7 +231,7 @@ export function ReceiptsView() {
           <DialogHeader>
             <DialogTitle>Receipt Details</DialogTitle>
             <DialogDescription>
-              {selectedReceiptId ? `Receipt ID: ${selectedReceiptId}` : "Receipt details"}
+              {selectedReceiptId ? `Bill ID: ${selectedReceiptId}` : "Receipt details"}
             </DialogDescription>
           </DialogHeader>
 
