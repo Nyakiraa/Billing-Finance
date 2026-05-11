@@ -6,7 +6,6 @@ import {
   FilePlus,
   Receipt,
   FileText,
-  CreditCard,
   ShieldCheck,
 } from "lucide-react"
 
@@ -20,7 +19,6 @@ const menuItems = [
   { id: "new-bill", label: "New Bill", icon: FilePlus },
   { id: "receipts", label: "Receipts", icon: Receipt },
   { id: "invoices", label: "Invoices", icon: FileText },
-  { id: "payments", label: "Payments", icon: CreditCard },
   { id: "insurance", label: "Insurance Claims", icon: ShieldCheck },
 ]
 

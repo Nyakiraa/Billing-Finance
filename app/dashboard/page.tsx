@@ -6,7 +6,6 @@ import { Header } from "@/components/billing/header"
 import { BillingWizard } from "@/components/billing/billing-wizard"
 import { DashboardView } from "@/components/billing/views/dashboard"
 import { InvoicesView } from "@/components/billing/views/invoices"
-import { PaymentsView } from "@/components/billing/views/payments"
 import { InsuranceView } from "@/components/billing/views/insurance"
 import { ProtectedRoute } from "@/components/protected-route"
 
@@ -14,7 +13,6 @@ const viewTitles: Record<string, string> = {
   dashboard: "Dashboard",
   "new-bill": "New Bill",
   invoices: "Invoices",
-  payments: "Payments",
   insurance: "Insurance Claims",
 }
 
@@ -29,8 +27,6 @@ export default function DashboardPage() {
         return <BillingWizard />
       case "invoices":
         return <InvoicesView />
-      case "payments":
-        return <PaymentsView />
       case "insurance":
         return <InsuranceView />
       default:
