@@ -23,7 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { BillRecord } from "@/lib/billing/types"
+import type { ReceiptRecord } from "@/lib/receipts-store"
 
 const BILLING_API_KEY = process.env.NEXT_PUBLIC_BILLING_API_KEY
 
@@ -53,20 +53,20 @@ function formatDateTime(isoString: string): string {
 
 export function ReceiptsView() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedBillId, setSelectedBillId] = useState<string | null>(null)
+  const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null)
 
-  const { data: billsData, error, isLoading, mutate } = useSWR<{ data: BillRecord[] }>(
-    "/api/bills",
+  const { data: receiptsData, error, isLoading, mutate } = useSWR<{ data: { receipts: ReceiptRecord[] } }>(
+    "/api/receipts?limit=200",
     fetcher,
     { revalidateOnFocus: true, refreshInterval: 30_000 }
   )
 
-  const { data: selectedBillData, isLoading: selectedBillLoading } = useSWR<{ data: BillRecord }>(
-    selectedBillId ? `/api/bills/${encodeURIComponent(selectedBillId)}` : null,
+  const { data: selectedReceiptData, isLoading: selectedReceiptLoading } = useSWR<{ data: { receipt: ReceiptRecord } }>(
+    selectedReceiptId ? `/api/receipts/${encodeURIComponent(selectedReceiptId)}` : null,
     fetcher
   )
 
-  const bills = billsData?.data || []
+  const receipts = receiptsData?.data?.receipts || []
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -84,7 +84,7 @@ export function ReceiptsView() {
 
       const ts = Date.now()
       try {
-        await mutate(fetcher(`/api/bills?_=${ts}`), { revalidate: false })
+        await mutate(fetcher(`/api/receipts?limit=200&_=${ts}`), { revalidate: false })
       } catch {
         // ignore; SWR will retry/poll anyway
       }
@@ -97,23 +97,21 @@ export function ReceiptsView() {
     }
   }, [mutate])
 
-  const filteredBills = useMemo(() => {
+  const filteredReceipts = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
-    if (!q) return bills
-    return bills.filter((bill) => {
+    if (!q) return receipts
+    return receipts.filter((receipt) => {
       return (
-        bill.bill_id.toLowerCase().includes(q) ||
-        bill.patient_name.toLowerCase().includes(q) ||
-        bill.patient_id.toLowerCase().includes(q)
+        receipt.receipt_id.toLowerCase().includes(q) ||
+        receipt.invoice_id.toLowerCase().includes(q) ||
+        receipt.patient_name.toLowerCase().includes(q) ||
+        receipt.patient_id.toLowerCase().includes(q)
       )
     })
-  }, [bills, searchTerm])
+  }, [receipts, searchTerm])
 
-  const totalReceipts = bills.filter((b) => !b.is_voided).length
-  const voidedReceipts = bills.filter((b) => b.is_voided).length
-  const totalCollected = bills
-    .filter((b) => !b.is_voided && b.payment_status === "Paid")
-    .reduce((sum, b) => sum + b.patient_balance, 0)
+  const totalReceipts = receipts.length
+  const totalCollected = receipts.reduce((sum, r) => sum + r.amount_paid, 0)
 
   return (
     <div className="space-y-6">
@@ -126,8 +124,8 @@ export function ReceiptsView() {
         </Card>
         <Card>
           <CardContent className="p-6">
-            <p className="text-sm text-muted-foreground">Voided</p>
-            <p className="text-2xl font-bold mt-1 text-destructive">{voidedReceipts}</p>
+            <p className="text-sm text-muted-foreground">Paid Patients</p>
+            <p className="text-2xl font-bold mt-1">{totalReceipts}</p>
           </CardContent>
         </Card>
         <Card>
@@ -146,7 +144,7 @@ export function ReceiptsView() {
               <div className="relative w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by bill ID or patient..."
+                  placeholder="Search by receipt/invoice/patient..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -160,7 +158,7 @@ export function ReceiptsView() {
         </CardHeader>
 
         <CardContent>
-          {isLoading && bills.length === 0 ? (
+          {isLoading && receipts.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
@@ -175,50 +173,42 @@ export function ReceiptsView() {
                   <TableRow className="bg-muted/50">
                     <TableHead>Receipt ID</TableHead>
                     <TableHead>Patient</TableHead>
-                    <TableHead>Visit Date</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Balance</TableHead>
+                    <TableHead>Invoice ID</TableHead>
+                    <TableHead>Issued At</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredBills.length === 0 ? (
+                  {filteredReceipts.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         No receipts found
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredBills
+                    filteredReceipts
                       .slice()
-                      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                      .map((bill) => (
-                        <TableRow key={bill.bill_id}>
-                          <TableCell className="font-mono text-sm">{bill.bill_id}</TableCell>
+                      .sort((a, b) => new Date(b.issued_at).getTime() - new Date(a.issued_at).getTime())
+                      .map((receipt) => (
+                        <TableRow key={receipt.receipt_id}>
+                          <TableCell className="font-mono text-sm">{receipt.receipt_id}</TableCell>
                           <TableCell>
                             <div className="space-y-0.5">
-                              <p className="font-medium">{bill.patient_name}</p>
-                              <p className="text-xs text-muted-foreground font-mono">{bill.patient_id}</p>
+                              <p className="font-medium">{receipt.patient_name}</p>
+                              <p className="text-xs text-muted-foreground font-mono">{receipt.patient_id}</p>
                             </div>
                           </TableCell>
-                          <TableCell>{bill.visit_date}</TableCell>
-                          <TableCell className="text-right font-medium">{formatCurrency(bill.total_amount)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(bill.patient_balance)}</TableCell>
+                          <TableCell className="font-mono text-sm">{receipt.invoice_id}</TableCell>
+                          <TableCell>{formatDateTime(receipt.issued_at)}</TableCell>
                           <TableCell>
-                            {bill.is_voided ? (
-                              <Badge variant="outline" className="text-destructive border-destructive">
-                                voided
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline">{bill.payment_status}</Badge>
-                            )}
+                            <Badge variant="outline">{receipt.status}</Badge>
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => setSelectedBillId(bill.bill_id)}
+                              onClick={() => setSelectedReceiptId(receipt.receipt_id)}
                               aria-label="View receipt"
                             >
                               <Eye className="w-4 h-4" />
@@ -234,73 +224,70 @@ export function ReceiptsView() {
         </CardContent>
       </Card>
 
-      <Dialog open={selectedBillId !== null} onOpenChange={(open) => (!open ? setSelectedBillId(null) : undefined)}>
+      <Dialog open={selectedReceiptId !== null} onOpenChange={(open) => (!open ? setSelectedReceiptId(null) : undefined)}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Receipt Details</DialogTitle>
             <DialogDescription>
-              {selectedBillId ? `Bill ID: ${selectedBillId}` : "Bill details"}
+              {selectedReceiptId ? `Receipt ID: ${selectedReceiptId}` : "Receipt details"}
             </DialogDescription>
           </DialogHeader>
 
-          {!selectedBillId ? null : selectedBillLoading ? (
+          {!selectedReceiptId ? null : selectedReceiptLoading ? (
             <div className="space-y-3">
               <Skeleton className="h-5 w-48" />
               <Skeleton className="h-5 w-64" />
               <Skeleton className="h-24 w-full" />
             </div>
-          ) : selectedBillData?.data ? (
+          ) : selectedReceiptData?.data?.receipt ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Patient</p>
-                  <p className="font-medium">{selectedBillData.data.patient_name}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{selectedBillData.data.patient_id}</p>
+                  <p className="font-medium">{selectedReceiptData.data.receipt.patient_name}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{selectedReceiptData.data.receipt.patient_id}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Visit Date</p>
-                  <p className="font-medium">{selectedBillData.data.visit_date}</p>
+                  <p className="text-sm text-muted-foreground">Invoice ID</p>
+                  <p className="font-medium font-mono">{selectedReceiptData.data.receipt.invoice_id}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Billing Date</p>
-                  <p className="font-medium">{selectedBillData.data.billing_date}</p>
+                  <p className="text-sm text-muted-foreground">Issued At</p>
+                  <p className="font-medium">{formatDateTime(selectedReceiptData.data.receipt.issued_at)}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Created</p>
-                  <p className="font-medium">{formatDateTime(selectedBillData.data.created_at)}</p>
+                  <p className="text-sm text-muted-foreground">Updated</p>
+                  <p className="font-medium">{formatDateTime(selectedReceiptData.data.receipt.updated_at)}</p>
                 </div>
               </div>
 
               <div className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Total Amount</span>
-                  <span className="font-semibold">{formatCurrency(selectedBillData.data.total_amount)}</span>
+                  <span className="text-sm text-muted-foreground">Amount Paid</span>
+                  <span className="font-semibold">{formatCurrency(selectedReceiptData.data.receipt.amount_paid)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Insurance Coverage</span>
-                  <span className="font-medium">{formatCurrency(selectedBillData.data.insurance_coverage)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Patient Balance</span>
-                  <span className="font-medium">{formatCurrency(selectedBillData.data.patient_balance)}</span>
+                  <span className="text-sm text-muted-foreground">Balance Remaining</span>
+                  <span className="font-medium">{formatCurrency(selectedReceiptData.data.receipt.balance_remaining)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Payment</span>
-                  <span className="font-medium">
-                    {selectedBillData.data.is_voided ? "voided" : selectedBillData.data.payment_status} ·{" "}
-                    {selectedBillData.data.payment_method}
-                  </span>
+                  <span className="font-medium">{selectedReceiptData.data.receipt.status} · {selectedReceiptData.data.receipt.payment_method}</span>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <p className="text-sm font-medium">Services Rendered</p>
+                <p className="text-sm font-medium">Invoice Items</p>
                 <div className="flex flex-wrap gap-2">
-                  {selectedBillData.data.services_rendered.map((service) => (
-                    <Badge key={service} variant="outline">
-                      {service}
-                    </Badge>
-                  ))}
+                  {selectedReceiptData.data.receipt.items.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No item details available.</p>
+                  ) : (
+                    selectedReceiptData.data.receipt.items.map((item, index) => (
+                      <Badge key={`${item.medicineId || item.serviceName || "item"}-${index}`} variant="outline">
+                        {item.medicineName || item.serviceName || "Item"}
+                      </Badge>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
