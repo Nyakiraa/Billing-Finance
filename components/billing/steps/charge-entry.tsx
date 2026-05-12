@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatCurrency } from "@/lib/utils"
+import { parseInventoryApiPayload } from "@/lib/inventory-stock"
 import type { Patient, ChargeEntry as ChargeEntryType, LineItem } from "@/lib/types"
 
 interface PatientMedicationsResponse {
@@ -90,31 +91,10 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
     { revalidateOnFocus: false }
   )
 
-  const inventoryResults = useMemo(() => {
-    const items: Array<{ medicineName: string; availableStock: number }> = []
-
-    const rawItems = inventoryData?.data?.inventory || inventoryData?.data?.stock || []
-    if (Array.isArray(rawItems)) {
-      for (const item of rawItems) {
-        const medicineName =
-          item?.medicine_name || item?.medicineName || item?.name || ""
-        const availableStock =
-          typeof item?.available_stock === "number"
-            ? item.available_stock
-            : typeof item?.stock === "number"
-            ? item.stock
-            : typeof item?.quantity === "number"
-            ? item.quantity
-            : undefined
-
-        if (medicineName && typeof availableStock === "number") {
-          items.push({ medicineName, availableStock })
-        }
-      }
-    }
-
-    return items
-  }, [inventoryData])
+  const inventoryResults = useMemo(
+    () => parseInventoryApiPayload(inventoryData),
+    [inventoryData]
+  )
 
   const inventoryMap = useMemo(() => {
     const map = new Map<string, number>()
@@ -127,8 +107,25 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
   const parseMedicineName = (itemName: string) => itemName.split(" (")[0].trim()
 
   const getStockForItem = (itemName: string) => {
-    const key = parseMedicineName(itemName).toLowerCase()
-    return inventoryMap.get(key)
+    const key = parseMedicineName(itemName).toLowerCase().trim()
+    const direct = inventoryMap.get(key)
+    if (direct !== undefined) return direct
+
+    let bestQty: number | undefined
+    let bestScore = -1
+    for (const [mk, qty] of inventoryMap) {
+      if (!mk) continue
+      let score = 0
+      if (key === mk) score = 1000
+      else if (key.startsWith(mk) || mk.startsWith(key))
+        score = Math.min(key.length, mk.length)
+      else continue
+      if (score > bestScore) {
+        bestScore = score
+        bestQty = qty
+      }
+    }
+    return bestQty
   }
 
   const patientLineItemStocks = lineItems.map((item) => ({

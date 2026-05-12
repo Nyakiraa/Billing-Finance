@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const INVENTORY_API_BASE_URL =
-  process.env.INVENTORY_API_BASE_URL?.trim() ||
-  "https://inventory-system.example.com/api/v1/external/stock"
+// Support both names; .env often uses INVENTORY_BASE_URL
+const INVENTORY_API_BASE_URL = (
+  process.env.INVENTORY_API_BASE_URL ||
+  process.env.INVENTORY_BASE_URL ||
+  ""
+)
+  .trim()
+  .replace(/^["']|["']$/g, "")
 
-const INVENTORY_API_KEY = process.env.INVENTORY_API_KEY?.trim()
+const INVENTORY_API_KEY = (process.env.INVENTORY_API_KEY || "").trim().replace(/^["']|["']$/g, "")
+
+const INVENTORY_NAMES_PARAM =
+  (process.env.INVENTORY_MEDICINE_NAMES_PARAM || "medicine_names").trim() || "medicine_names"
 
 export const runtime = "nodejs"
 
@@ -36,11 +44,23 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  if (!INVENTORY_API_BASE_URL) {
+    return NextResponse.json(
+      {
+        status: "error",
+        error_code: "CONFIGURATION_ERROR",
+        message: "Missing INVENTORY_API_BASE_URL or INVENTORY_BASE_URL configuration",
+      },
+      { status: 500 }
+    )
+  }
+
   try {
     const url = new URL(INVENTORY_API_BASE_URL)
-    url.searchParams.set("medicine_names", query)
+    url.searchParams.set(INVENTORY_NAMES_PARAM, query)
 
     const response = await fetch(url.toString(), {
+      cache: "no-store",
       headers: {
         "x-api-key": INVENTORY_API_KEY,
         "Content-Type": "application/json",
