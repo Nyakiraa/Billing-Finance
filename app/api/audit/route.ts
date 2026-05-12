@@ -4,6 +4,23 @@ import { validateApiKey, unauthorizedResponse, getDeprecationWarningHeader } fro
 const AUDIT_BASE_URL = "https://admin-subystem.onrender.com/admin/api/audit/ingest"
 const AUDIT_API_KEY = process.env.AUDIT_API_KEY
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function buildSafeUserId(rawUserId: string): string {
+  const cleaned = rawUserId.trim()
+  if (isUuid(cleaned)) {
+    return cleaned
+  }
+
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+
+  return "00000000-0000-0000-0000-000000000000"
+}
+
 export async function POST(request: NextRequest) {
   const authResult = validateApiKey(request, { routeName: "/api/audit", requireApiKey: false })
   if (!authResult.isValid) {
@@ -23,7 +40,8 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as Record<string, unknown>
 
-    const user_id = body.user_id != null ? String(body.user_id).trim() : ""
+    const rawUserId = body.user_id != null ? String(body.user_id) : ""
+    const user_id = rawUserId ? buildSafeUserId(rawUserId) : ""
     const action_type = body.action_type != null ? String(body.action_type).trim() : ""
     const details = body.details != null ? String(body.details).trim() : ""
     const subsystem = body.subsystem != null ? String(body.subsystem).trim() : ""

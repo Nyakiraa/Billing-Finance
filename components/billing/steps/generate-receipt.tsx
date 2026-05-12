@@ -29,15 +29,23 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
   const [receipt, setReceipt] = useState<Receipt | null>(null)
   const billCreatedRef = useRef(false)
   const [billCreateError, setBillCreateError] = useState<string | null>(null)
+  const [invoicePatchMessage, setInvoicePatchMessage] = useState<string | null>(null)
+  const [invoicePatchError, setInvoicePatchError] = useState<string | null>(null)
+  const [invoicePatchComplete, setInvoicePatchComplete] = useState(false)
 
   // Send audit log to admin system
   const sendAuditLog = async (receiptData: Receipt) => {
     try {
+      const auditUserId =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : "00000000-0000-0000-0000-000000000000"
+
       await fetch("/api/audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: "billing-system",
+          user_id: auditUserId,
           action_type: "RECORD_CREATED",
           details: `Receipt ${receiptData.receipt_id} generated for patient ${receiptData.patient_name}. Invoice: ${receiptData.invoice_id}. Amount: ${receiptData.amount_paid}. Payment method: ${receiptData.payment_method}.`,
           ip_addr: "0.0.0.0",
@@ -145,6 +153,40 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
     run()
   }, [receipt, invoice])
 
+  useEffect(() => {
+    if (!receipt || invoicePatchComplete) return
+
+    const patchInvoice = async () => {
+      setInvoicePatchMessage(null)
+      setInvoicePatchError(null)
+
+      try {
+        const response = await fetch(`/api/invoices/${encodeURIComponent(invoice.invoice_id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "paid",
+            invoice,
+            updated_by: "billing-system",
+          }),
+        })
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null)
+          throw new Error(payload?.message || "Failed to patch PMS invoice status")
+        }
+
+        setInvoicePatchMessage("PMS invoice status patched to paid.")
+      } catch (error) {
+        setInvoicePatchError(error instanceof Error ? error.message : "Failed to patch PMS invoice status")
+      } finally {
+        setInvoicePatchComplete(true)
+      }
+    }
+
+    patchInvoice()
+  }, [receipt, invoice, invoicePatchComplete])
+
   if (!receipt) return null
 
   const billId = receipt.invoice_id.replace(/^INV-/, "BILL-")
@@ -243,6 +285,12 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
                 <p className="text-xs text-destructive mt-3">
                   Unable to save bill record to dashboard: {billCreateError}
                 </p>
+              )}
+              {invoicePatchMessage && (
+                <p className="text-xs text-foreground mt-3">{invoicePatchMessage}</p>
+              )}
+              {invoicePatchError && (
+                <p className="text-xs text-destructive mt-3">{invoicePatchError}</p>
               )}
             </div>
           </div>

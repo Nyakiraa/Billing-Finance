@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import useSWR from "swr"
 import { Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -76,6 +76,65 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
   )
 
   const patientMedications = medicationsData?.data?.medications || []
+
+  const medicineNames = useMemo(() => {
+    return patientMedications
+      .map((med) => med.medicineName || med.id || "")
+      .filter(Boolean)
+      .join(",")
+  }, [patientMedications])
+
+  const { data: inventoryData, error: inventoryError, isLoading: inventoryLoading } = useSWR(
+    medicineNames ? `/api/inventory?medicine_names=${encodeURIComponent(medicineNames)}` : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  )
+
+  const inventoryResults = useMemo(() => {
+    const items: Array<{ medicineName: string; availableStock: number }> = []
+
+    const rawItems = inventoryData?.data?.inventory || inventoryData?.data?.stock || []
+    if (Array.isArray(rawItems)) {
+      for (const item of rawItems) {
+        const medicineName =
+          item?.medicine_name || item?.medicineName || item?.name || ""
+        const availableStock =
+          typeof item?.available_stock === "number"
+            ? item.available_stock
+            : typeof item?.stock === "number"
+            ? item.stock
+            : typeof item?.quantity === "number"
+            ? item.quantity
+            : undefined
+
+        if (medicineName && typeof availableStock === "number") {
+          items.push({ medicineName, availableStock })
+        }
+      }
+    }
+
+    return items
+  }, [inventoryData])
+
+  const inventoryMap = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const item of inventoryResults) {
+      map.set(item.medicineName.trim().toLowerCase(), item.availableStock)
+    }
+    return map
+  }, [inventoryResults])
+
+  const parseMedicineName = (itemName: string) => itemName.split(" (")[0].trim()
+
+  const getStockForItem = (itemName: string) => {
+    const key = parseMedicineName(itemName).toLowerCase()
+    return inventoryMap.get(key)
+  }
+
+  const patientLineItemStocks = lineItems.map((item) => ({
+    ...item,
+    availableStock: getStockForItem(item.item_name),
+  }))
 
   // If the user selects a different patient, reset step-specific state so we
   // don't show the previous patient's line items.
@@ -255,6 +314,7 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
                   <TableHead>Item Name</TableHead>
                   <TableHead className="w-[100px] text-right">Qty</TableHead>
                   <TableHead className="w-[140px] text-right">Unit Price</TableHead>
+                  <TableHead className="w-[120px] text-right">Inventory Qty</TableHead>
                   <TableHead className="w-[140px] text-right">Total</TableHead>
                   <TableHead className="w-[60px]"></TableHead>
                 </TableRow>
@@ -262,7 +322,7 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
               <TableBody>
                 {lineItems.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       No medicines found for this patient.
                     </TableCell>
                   </TableRow>
@@ -303,6 +363,13 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
                         />
                       </TableCell>
                       <TableCell className="text-right font-medium">
+                        {typeof getStockForItem(item.item_name) === "number" ? (
+                          getStockForItem(item.item_name)
+                        ) : (
+                          <span className="text-muted-foreground">n/a</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
                         {formatCurrency(item.total)}
                       </TableCell>
                       <TableCell>
@@ -322,6 +389,32 @@ export function ChargeEntry({ patient, chargeEntry, onUpdateChargeEntry, onBack,
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Inventory Stock</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {inventoryLoading ? (
+            <p className="text-sm text-muted-foreground">Loading inventory data…</p>
+          ) : inventoryError ? (
+            <p className="text-sm text-destructive">Unable to load inventory data.</p>
+          ) : patientLineItemStocks.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No medicine line items available to check stock.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {patientLineItemStocks.map((item) => (
+                <div key={item.id} className="rounded-lg border border-border p-4">
+                  <p className="text-sm font-semibold">{item.item_name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Available Quantity: {typeof item.availableStock === "number" ? item.availableStock : "n/a"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
