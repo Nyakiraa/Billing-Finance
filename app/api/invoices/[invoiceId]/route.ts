@@ -15,7 +15,7 @@ function isMissingInvoicesTableError(error: unknown): boolean {
   )
 }
 
-async function patchPmsInvoiceStatus(invoiceId: string, status: string, payload?: unknown) {
+async function patchPmsInvoiceStatus(invoiceId: string, status: string) {
   if (!PMS_INVOICES_API_KEY) {
     throw new Error("Missing PMS_INVOICES_API_KEY configuration")
   }
@@ -28,7 +28,7 @@ async function patchPmsInvoiceStatus(invoiceId: string, status: string, payload?
       "Content-Type": "application/json",
       "x-api-key": PMS_INVOICES_API_KEY,
     },
-    body: JSON.stringify({ status, ...(payload && typeof payload === "object" ? payload : {}) }),
+    body: JSON.stringify({ status }),
   })
 
   if (!response.ok) {
@@ -164,7 +164,7 @@ export async function PATCH(request: NextRequest, context: RouteContext<"/api/in
     }
 
     // Always use PMS API for invoice status updates
-    const patched = await patchPmsInvoiceStatus(invoiceId, status.toLowerCase(), invoicePayload)
+    const patched = await patchPmsInvoiceStatus(invoiceId, status.toLowerCase())
     return NextResponse.json(
       {
         status: "success",
