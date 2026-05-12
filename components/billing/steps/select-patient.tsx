@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { formatDate } from "@/lib/utils"
-import type { Patient, ExternalPatient, PatientsApiResponse } from "@/lib/types"
+import type { Patient, ExternalPatient, PatientsApiResponse, InvoicesApiResponse } from "@/lib/types"
 
 interface SelectPatientProps {
   selectedPatient: Patient | null
@@ -68,11 +68,30 @@ export function SelectPatient({ selectedPatient, onSelectPatient, onNext }: Sele
     }
   )
 
+  // Fetch invoices to check for fully paid patients
+  const { data: invoicesData } = useSWR<InvoicesApiResponse>(
+    "/api/invoices?limit=100",
+    fetcher,
+    {
+      revalidateOnFocus: false,
+    }
+  )
+
   // API returns: { data: { patients: [...] }, pagination: { pages, total }, status, results }
   const patientsArray = data?.data?.patients || []
-  const patients = patientsArray.map(mapExternalToPatient)
+  const allPatients = patientsArray.map(mapExternalToPatient)
+  
+  // Get patient IDs that have fully paid invoices
+  const paidPatientIds = new Set(
+    invoicesData?.data?.invoices
+      .filter(inv => inv.status === "paid")
+      .map(inv => inv.patient_id) || []
+  )
+  
+  // Filter out patients with fully paid invoices
+  const patients = allPatients.filter(patient => !paidPatientIds.has(patient.patient_id))
   const totalPages = data?.pagination?.pages || 1
-  const totalResults = data?.pagination?.total || 0
+  const totalResults = patients.length
 
   return (
     <div className="space-y-6">
@@ -119,6 +138,11 @@ export function SelectPatient({ selectedPatient, onSelectPatient, onNext }: Sele
               </Badge>
             )}
           </div>
+          {allPatients.length > patients.length && (
+            <div className="text-sm text-muted-foreground bg-amber-50 border border-amber-200 rounded p-2 mt-2">
+              {allPatients.length - patients.length} patient(s) with fully paid invoices are hidden from selection.
+            </div>
+          )}
           <div className="relative mt-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input

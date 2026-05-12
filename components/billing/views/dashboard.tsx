@@ -99,8 +99,15 @@ export function DashboardView() {
     .filter((inv) => inv.status === "paid")
     .reduce((sum, inv) => sum + inv.total_amount, 0)
 
-  const pendingInvoices = invoices.filter((inv) => inv.status === "pending")
-  const pendingAmount = pendingInvoices.reduce((sum, inv) => sum + inv.total_amount, 0)
+  // Get all pending invoices first
+  const allPendingInvoices = invoices.filter((inv) => inv.status === "pending")
+  const pendingAmount = allPendingInvoices.reduce((sum, inv) => sum + inv.total_amount, 0)
+
+  // For display purposes, show all pending invoices
+  const pendingInvoices = allPendingInvoices
+
+  // Active patients count should match pending invoices count (as requested)
+  const activePatients = pendingInvoices.length
 
   // "Payments Today" should reflect bills/receipts generated in this app (not PMS invoice status).
   const paidToday = bills.filter((bill) => {
@@ -111,7 +118,6 @@ export function DashboardView() {
   const paidTodayAmount = paidToday.reduce((sum, bill) => sum + bill.patient_balance, 0)
 
   const totalPatients = patientsData?.pagination?.total || patients.length
-  const activePatients = patients.filter((p) => p.status === "active").length
 
   const stats = [
     {

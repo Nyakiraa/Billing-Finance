@@ -24,6 +24,16 @@ export function InvoicesView() {
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
 
+  // Fetch all invoices for dashboard statistics
+  const { data: allInvoicesData } = useSWR<InvoicesApiResponse>(
+    "/api/invoices?limit=1000",
+    fetcher,
+    {
+      revalidateOnFocus: false,
+    }
+  )
+
+  // Fetch paginated invoices for table display
   const { data, error, isLoading, mutate } = useSWR<InvoicesApiResponse>(
     `/api/invoices?page=${currentPage}&limit=20`,
     fetcher,
@@ -33,6 +43,7 @@ export function InvoicesView() {
     }
   )
 
+  const allInvoices = allInvoicesData?.data?.invoices || []
   const invoices = data?.data?.invoices || []
   const totalPages = data?.pagination?.pages || 1
   const totalResults = data?.pagination?.total || 0
@@ -65,14 +76,14 @@ export function InvoicesView() {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground">Total Invoices</p>
-            <p className="text-2xl font-bold mt-1">{totalResults}</p>
+            <p className="text-2xl font-bold mt-1">{allInvoices.length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground">Paid</p>
             <p className="text-2xl font-bold mt-1 text-green-600">
-              {invoices.filter((i) => i.status === "paid").length}
+              {allInvoices.filter((i) => i.status === "paid").length}
             </p>
           </CardContent>
         </Card>
@@ -80,7 +91,7 @@ export function InvoicesView() {
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground">Pending</p>
             <p className="text-2xl font-bold mt-1 text-amber-600">
-              {invoices.filter((i) => i.status === "pending").length}
+              {allInvoices.filter((i) => i.status === "pending").length}
             </p>
           </CardContent>
         </Card>
@@ -88,7 +99,7 @@ export function InvoicesView() {
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground">Total Amount</p>
             <p className="text-2xl font-bold mt-1">
-              {formatCurrency(invoices.reduce((sum, i) => sum + i.total_amount, 0))}
+              {formatCurrency(allInvoices.reduce((sum, i) => sum + i.total_amount, 0))}
             </p>
           </CardContent>
         </Card>
