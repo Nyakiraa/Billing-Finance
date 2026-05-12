@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 import { Search, Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -15,8 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { formatDate } from "@/lib/utils"
-import type { Patient, ExternalPatient, PatientsApiResponse, InvoicesApiResponse } from "@/lib/types"
+import type { Patient, ExternalInvoice, InvoicesApiResponse } from "@/lib/types"
 
 interface SelectPatientProps {
   selectedPatient: Patient | null
@@ -24,74 +23,88 @@ interface SelectPatientProps {
   onNext: () => void
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const PMS_PAGE_CHUNK = 100
 
-// Convert external patient to internal Patient type
-function mapExternalToPatient(external: ExternalPatient): Patient {
-  return {
-    patient_id: external.patient_id,
-    full_name: `${external.first_name} ${external.last_name}`,
-    date_of_birth: external.date_of_birth,
-    gender: external.gender || "N/A",
-    contact_number: external.contact_number || "N/A",
-    status: external.status || "active",
-    ward_room: external.address || "N/A",
-    insurance_provider: external.insurance?.provider || "Self-Pay",
-    insurance_coverage_percentage: external.insurance?.coverage_percentage || 0,
-    insurance_policy_number: external.insurance?.policy_number || "N/A",
-    attending_physician: external.attending_physician || "N/A",
+async function invoicesFetcher(url: string): Promise<InvoicesApiResponse> {
+  const res = await fetch(url)
+  const body = (await res.json()) as InvoicesApiResponse & { message?: string; error_code?: string }
+  if (!res.ok || body.status === "error") {
+    throw new Error(
+      typeof body === "object" && body && "message" in body && typeof body.message === "string"
+        ? body.message
+        : "Failed to load invoices",
+    )
   }
+  return body
+}
+
+/** One row per patient_id from pending PMS invoices (invoice list is the source of truth). */
+function mapPendingInvoicesToPatients(invoices: ExternalInvoice[]): Patient[] {
+  const pending = invoices.filter((inv) => inv.status === "pending")
+  const byPatient = new Map<string, ExternalInvoice>()
+  for (const inv of pending) {
+    if (!inv.patient_id) continue
+    if (!byPatient.has(inv.patient_id)) byPatient.set(inv.patient_id, inv)
+  }
+  return [...byPatient.values()].map((inv) => ({
+    patient_id: inv.patient_id,
+    full_name: inv.patient_name?.trim() || inv.patient_id,
+    date_of_birth: "",
+    gender: "N/A",
+    contact_number: "N/A",
+    status: "pending",
+    ward_room: "N/A",
+    insurance_provider: "Self-Pay",
+    insurance_coverage_percentage: 0,
+    insurance_policy_number: "N/A",
+    attending_physician: "N/A",
+  }))
 }
 
 export function SelectPatient({ selectedPatient, onSelectPatient, onNext }: SelectPatientProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 10
 
-  // Debounce search input
-  const handleSearchChange = (value: string) => {
-    setSearchTerm(value)
-    setCurrentPage(1) // Reset to first page on search
-    // Simple debounce using setTimeout
-    const timeoutId = setTimeout(() => {
-      setDebouncedSearch(value)
-    }, 300)
-    return () => clearTimeout(timeoutId)
-  }
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchTerm), 300)
+    return () => clearTimeout(id)
+  }, [searchTerm])
 
-  const { data, error, isLoading } = useSWR<PatientsApiResponse>(
-    `/api/patients?page=${currentPage}&limit=10${debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : ""}`,
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      keepPreviousData: true,
-    }
+  const invoicesKey = `/api/invoices?status=pending&all_pages=1&limit=${PMS_PAGE_CHUNK}&fresh=1`
+
+  const { data, error, isLoading } = useSWR<InvoicesApiResponse>(invoicesKey, invoicesFetcher, {
+    revalidateOnFocus: false,
+    keepPreviousData: true,
+  })
+
+  const allPatients = useMemo(
+    () => mapPendingInvoicesToPatients(data?.data?.invoices ?? []),
+    [data?.data?.invoices],
   )
 
-  // Fetch invoices to check for fully paid patients
-  const { data: invoicesData } = useSWR<InvoicesApiResponse>(
-    "/api/invoices?limit=100",
-    fetcher,
-    {
-      revalidateOnFocus: false,
-    }
-  )
+  const pendingInvoiceRowCount = useMemo(() => {
+    const rows = data?.data?.invoices ?? []
+    return rows.filter((inv) => inv.status === "pending").length
+  }, [data?.data?.invoices])
 
-  // API returns: { data: { patients: [...] }, pagination: { pages, total }, status, results }
-  const patientsArray = data?.data?.patients || []
-  const allPatients = patientsArray.map(mapExternalToPatient)
-  
-  // Get patient IDs that have fully paid invoices
-  const paidPatientIds = new Set(
-    invoicesData?.data?.invoices
-      .filter(inv => inv.status === "paid")
-      .map(inv => inv.patient_id) || []
-  )
-  
-  // Filter out patients with fully paid invoices
-  const patients = allPatients.filter(patient => !paidPatientIds.has(patient.patient_id))
-  const totalPages = data?.pagination?.pages || 1
-  const totalResults = patients.length
+  const filteredPatients = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase()
+    if (!q) return allPatients
+    return allPatients.filter(
+      (p) =>
+        p.patient_id.toLowerCase().includes(q) ||
+        p.full_name.toLowerCase().includes(q),
+    )
+  }, [allPatients, debouncedSearch])
+
+  const totalPages = Math.max(1, Math.ceil(filteredPatients.length / pageSize))
+  const safePage = Math.min(currentPage, totalPages)
+  const pageSlice = useMemo(() => {
+    const start = (safePage - 1) * pageSize
+    return filteredPatients.slice(start, start + pageSize)
+  }, [filteredPatients, safePage, pageSize])
 
   return (
     <div className="space-y-6">
@@ -105,7 +118,7 @@ export function SelectPatient({ selectedPatient, onSelectPatient, onNext }: Sele
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
                   <span className="text-primary-foreground font-semibold">
-                    {selectedPatient.full_name.split(" ").map(n => n[0]).join("")}
+                    {selectedPatient.full_name.split(" ").map((n) => n[0]).join("")}
                   </span>
                 </div>
                 <div>
@@ -134,21 +147,31 @@ export function SelectPatient({ selectedPatient, onSelectPatient, onNext }: Sele
             <CardTitle>Select Patient</CardTitle>
             {data && (
               <Badge variant="secondary">
-                {totalResults} patients found
+                {filteredPatients.length} patients · {pendingInvoiceRowCount} pending invoices
               </Badge>
             )}
           </div>
-          {allPatients.length > patients.length && (
-            <div className="text-sm text-muted-foreground bg-amber-50 border border-amber-200 rounded p-2 mt-2">
-              {allPatients.length - patients.length} patient(s) with fully paid invoices are hidden from selection.
-            </div>
-          )}
+          <p className="text-sm text-muted-foreground">
+            Patients are deduplicated by ID; multiple pending invoices for the same patient count once in the table.
+          </p>
+          {data &&
+            typeof data.pagination?.total === "number" &&
+            pendingInvoiceRowCount > 0 &&
+            pendingInvoiceRowCount < data.pagination.total && (
+              <div className="text-sm text-muted-foreground bg-amber-50 border border-amber-200 rounded p-2 mt-2">
+                Loaded {pendingInvoiceRowCount} of {data.pagination.total} invoice rows reported by PMS. Try again or
+                check PMS pagination if this persists.
+              </div>
+            )}
           <div className="relative mt-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name, ID..."
+              placeholder="Search by name, patient ID..."
               value={searchTerm}
-              onChange={(e) => handleSearchChange(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value)
+                setCurrentPage(1)
+              }}
               className="pl-10"
             />
           </div>
@@ -157,24 +180,26 @@ export function SelectPatient({ selectedPatient, onSelectPatient, onNext }: Sele
           {error && (
             <div className="flex items-center gap-2 p-4 text-destructive bg-destructive/10 rounded-lg mb-4">
               <AlertCircle className="w-5 h-5" />
-              <span>Failed to load patients. Please try again.</span>
+              <span>{error instanceof Error ? error.message : "Failed to load pending invoices."}</span>
             </div>
           )}
 
           {isLoading && !data && (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <span className="ml-2 text-muted-foreground">Loading patients...</span>
+              <span className="ml-2 text-muted-foreground">Loading pending invoices from PMS…</span>
             </div>
           )}
 
-          {!isLoading && patients.length === 0 && !error && (
+          {!isLoading && pageSlice.length === 0 && !error && (
             <div className="text-center py-12 text-muted-foreground">
-              No patients found. Try adjusting your search.
+              {allPatients.length === 0
+                ? "No pending invoices found. There are no patients to bill right now."
+                : "No patients match your search."}
             </div>
           )}
 
-          {patients.length > 0 && (
+          {pageSlice.length > 0 && (
             <>
               <div className="rounded-lg border border-border overflow-hidden">
                 <Table>
@@ -182,30 +207,24 @@ export function SelectPatient({ selectedPatient, onSelectPatient, onNext }: Sele
                     <TableRow className="bg-muted/50">
                       <TableHead>Patient ID</TableHead>
                       <TableHead>Full Name</TableHead>
-                      <TableHead>Gender</TableHead>
-                      <TableHead>Date of Birth</TableHead>
-                      <TableHead>Contact</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {patients.map((patient) => (
+                    {pageSlice.map((patient) => (
                       <TableRow
                         key={patient.patient_id}
                         className={selectedPatient?.patient_id === patient.patient_id ? "bg-primary/5" : ""}
                       >
                         <TableCell className="font-mono text-sm">{patient.patient_id}</TableCell>
                         <TableCell className="font-medium">{patient.full_name}</TableCell>
-                        <TableCell>{patient.gender}</TableCell>
-                        <TableCell>{formatDate(patient.date_of_birth)}</TableCell>
-                        <TableCell>{patient.contact_number}</TableCell>
                         <TableCell>
-                          <Badge 
-                            variant="outline" 
-                            className={patient.status === "active" ? "text-green-600 border-green-600" : "text-muted-foreground"}
+                          <Badge
+                            variant="outline"
+                            className="text-amber-700 border-amber-600 bg-amber-50"
                           >
-                            {patient.status}
+                            pending invoice
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -226,17 +245,16 @@ export function SelectPatient({ selectedPatient, onSelectPatient, onNext }: Sele
                 </Table>
               </div>
 
-              {/* Pagination */}
               <div className="flex items-center justify-between mt-4">
                 <p className="text-sm text-muted-foreground">
-                  Page {currentPage} of {totalPages}
+                  Page {safePage} of {totalPages}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage <= 1}
+                    disabled={safePage <= 1}
                   >
                     <ChevronLeft className="w-4 h-4" />
                     Previous
@@ -245,7 +263,7 @@ export function SelectPatient({ selectedPatient, onSelectPatient, onNext }: Sele
                     variant="outline"
                     size="sm"
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage >= totalPages}
+                    disabled={safePage >= totalPages}
                   >
                     Next
                     <ChevronRight className="w-4 h-4" />

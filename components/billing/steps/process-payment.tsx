@@ -41,26 +41,19 @@ export function ProcessPayment({
     setIsProcessing(true)
     setPaymentError(false)
 
-    // Simulate payment processing
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    // Short confirmation delay only (no random failures — payment is recorded in-app)
+    await new Promise((resolve) => setTimeout(resolve, 200))
 
-    // Mock: 90% success rate
-    const isSuccessful = Math.random() > 0.1
-
-    if (isSuccessful) {
-      setPaymentSuccess(true)
-      onUpdatePayment({
-        amount_due: invoice.total_amount_due,
-        payment_method: paymentMethod,
-        amount_tendered: amountTendered,
-        change,
-      })
-      setTimeout(() => {
-        onNext()
-      }, 1000)
-    } else {
-      setPaymentError(true)
-    }
+    setPaymentSuccess(true)
+    onUpdatePayment({
+      amount_due: invoice.total_amount_due,
+      payment_method: paymentMethod,
+      amount_tendered: amountTendered,
+      change,
+    })
+    setTimeout(() => {
+      onNext()
+    }, 250)
 
     setIsProcessing(false)
   }

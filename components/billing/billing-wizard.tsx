@@ -20,7 +20,7 @@ const STEPS = [
   "Select Patient",
   "Charge Entry",
   "Tax Computation",
-  "Generate Invoice",
+  "Validate Invoice",
   "Process Payment",
   "Receipt",
 ]

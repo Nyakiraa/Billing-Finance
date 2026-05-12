@@ -30,6 +30,7 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
   const billCreatedRef = useRef(false)
   const auditPostedForReceiptIdRef = useRef<string | null>(null)
   const [billCreateError, setBillCreateError] = useState<string | null>(null)
+  const [pmsPatchError, setPmsPatchError] = useState<string | null>(null)
 
   const createBillRecord = async (payload: CreateBillInput) => {
     const res = await fetch("/api/bills", {
@@ -54,14 +55,55 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
     }
   }
 
+  const notifyInvoicesStale = () => {
+    try {
+      if (typeof window === "undefined") return
+      const channel = new BroadcastChannel("billing-dashboard")
+      channel.postMessage({ type: "invoices_cache_invalidate" as const })
+      channel.close()
+    } catch {
+      // ignore
+    }
+  }
+
   const notifyDashboard = (message: { type: "bill_created"; bill_id: string }) => {
     try {
       if (typeof window === "undefined") return
       const channel = new BroadcastChannel("billing-dashboard")
       channel.postMessage(message)
+      channel.postMessage({ type: "invoices_cache_invalidate" as const })
       channel.close()
     } catch {
       // ignore (BroadcastChannel not supported)
+    }
+  }
+
+  /** Mark the prescription invoice as paid in PMS so the Invoices view matches the receipt. */
+  const patchPmsInvoicePaid = async () => {
+    const patchId = invoice._id ?? invoice.invoice_id
+    const res = await fetch(`/api/invoices/${encodeURIComponent(patchId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status: "paid",
+        patient_id: invoice.patient_id,
+        invoice_id: invoice.invoice_id,
+        invoice: {
+          _id: invoice._id,
+          invoice_id: invoice.invoice_id,
+          patient_id: invoice.patient_id,
+        },
+      }),
+    })
+    if (!res.ok) {
+      let msg = await res.text()
+      try {
+        const j = JSON.parse(msg) as { message?: string }
+        if (typeof j?.message === "string") msg = j.message
+      } catch {
+        // keep text
+      }
+      throw new Error(msg || `Could not mark invoice paid in PMS (${res.status})`)
     }
   }
 
@@ -114,6 +156,7 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
 
     const run = async () => {
       setBillCreateError(null)
+      setPmsPatchError(null)
 
       const totalBeforeInsurance = invoice.total_amount_due + invoice.insurance_coverage
       const servicesRendered = Array.from(new Set(invoice.line_items.map((li) => li.item_name))).slice(0, 20)
@@ -136,12 +179,36 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
       }
 
       try {
-        await createBillRecord(payload)
-        notifyDashboard({ type: "bill_created", bill_id: payload.bill_id })
+        const [billResult, pmsResult] = await Promise.allSettled([
+          createBillRecord(payload),
+          patchPmsInvoicePaid(),
+        ])
+
+        if (billResult.status === "fulfilled") {
+          notifyDashboard({ type: "bill_created", bill_id: payload.bill_id })
+        } else if (pmsResult.status === "fulfilled") {
+          notifyInvoicesStale()
+        }
+
+        if (billResult.status === "rejected") {
+          const message =
+            billResult.reason instanceof Error ? billResult.reason.message : "Failed to save bill record"
+          setBillCreateError(message)
+          console.error("Failed to create bill record:", billResult.reason)
+        }
+
+        if (pmsResult.status === "rejected") {
+          const message =
+            pmsResult.reason instanceof Error
+              ? pmsResult.reason.message
+              : "Failed to update invoice status in PMS"
+          setPmsPatchError(message)
+          console.error("PMS invoice patch failed:", pmsResult.reason)
+        }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to save bill record"
+        const message = error instanceof Error ? error.message : "Failed to complete billing"
         setBillCreateError(message)
-        console.error("Failed to create bill record:", error)
+        console.error("Receipt billing flow error:", error)
       }
     }
 
@@ -245,6 +312,11 @@ export function GenerateReceipt({ invoice, payment, onNewTransaction }: Generate
               {billCreateError && (
                 <p className="text-xs text-destructive mt-3">
                   Unable to save bill record to dashboard: {billCreateError}
+                </p>
+              )}
+              {pmsPatchError && (
+                <p className="text-xs text-amber-700 mt-2">
+                  Receipt is saved, but the invoice could not be marked paid in PMS: {pmsPatchError}
                 </p>
               )}
             </div>

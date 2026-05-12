@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import useSWR from "swr"
 import { Search, Eye, Download, RefreshCw, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -18,30 +18,74 @@ import {
 import { formatCurrency, formatDate } from "@/lib/utils"
 import type { InvoicesApiResponse } from "@/lib/types"
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json())
+async function invoicesJsonFetcher(url: string): Promise<InvoicesApiResponse> {
+  const res = await fetch(url)
+  const body = (await res.json()) as InvoicesApiResponse & { message?: string }
+  if (!res.ok || body.status === "error") {
+    throw new Error(typeof body.message === "string" ? body.message : "Failed to load invoices")
+  }
+  return body
+}
 
 export function InvoicesView() {
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
 
   // Fetch all invoices for dashboard statistics
-  const { data: allInvoicesData } = useSWR<InvoicesApiResponse>(
-    "/api/invoices?limit=1000",
-    fetcher,
-    {
-      revalidateOnFocus: false,
-    }
-  )
+  const {
+    data: allInvoicesData,
+    mutate: mutateAllInvoices,
+    isValidating: validatingAll,
+  } = useSWR<InvoicesApiResponse>("/api/invoices?limit=1000", invoicesJsonFetcher, {
+    revalidateOnFocus: false,
+  })
 
   // Fetch paginated invoices for table display
-  const { data, error, isLoading, mutate } = useSWR<InvoicesApiResponse>(
+  const {
+    data,
+    error,
+    isLoading,
+    isValidating: validatingPage,
+    mutate: mutatePage,
+  } = useSWR<InvoicesApiResponse>(
     `/api/invoices?page=${currentPage}&limit=20`,
-    fetcher,
+    invoicesJsonFetcher,
     {
       revalidateOnFocus: false,
       keepPreviousData: true,
     }
   )
+
+  const refreshInvoices = useCallback(async () => {
+    const ts = Date.now()
+    await Promise.all([
+      mutateAllInvoices(invoicesJsonFetcher(`/api/invoices?limit=1000&fresh=1&_=${ts}`), { revalidate: false }),
+      mutatePage(invoicesJsonFetcher(`/api/invoices?page=${currentPage}&limit=20&fresh=1&_=${ts}`), {
+        revalidate: false,
+      }),
+    ])
+  }, [currentPage, mutateAllInvoices, mutatePage])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    let channel: BroadcastChannel | null = null
+    try {
+      channel = new BroadcastChannel("billing-dashboard")
+    } catch {
+      return
+    }
+    const onMessage = (event: MessageEvent) => {
+      const t = (event.data as { type?: string } | undefined)?.type
+      if (t === "bill_created" || t === "invoices_cache_invalidate") {
+        void refreshInvoices()
+      }
+    }
+    channel.addEventListener("message", onMessage)
+    return () => {
+      channel?.removeEventListener("message", onMessage)
+      channel?.close()
+    }
+  }, [refreshInvoices])
 
   const allInvoices = allInvoicesData?.data?.invoices || []
   const invoices = data?.data?.invoices || []
@@ -122,8 +166,16 @@ export function InvoicesView() {
                   className="pl-10"
                 />
               </div>
-              <Button variant="outline" size="icon" onClick={() => mutate()}>
-                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => void refreshInvoices()}
+                disabled={validatingAll || validatingPage}
+                title="Refresh from PMS"
+              >
+                <RefreshCw
+                  className={`w-4 h-4 ${isLoading || validatingAll || validatingPage ? "animate-spin" : ""}`}
+                />
               </Button>
             </div>
           </div>

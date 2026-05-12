@@ -8,6 +8,98 @@ const PMS_INVOICES_API_BASE_URL =
 
 const PMS_INVOICES_API_KEY = process.env.PMS_INVOICES_API_KEY?.trim()
 
+type PmsInvoiceListPayload = {
+  status?: string
+  results?: number
+  data?: { invoices?: unknown[] }
+  pagination?: { limit?: number; page?: number; pages?: number; total?: number }
+}
+
+function parsePmsInvoiceChunk(payload: PmsInvoiceListPayload | null): unknown[] {
+  if (!payload?.data?.invoices) return []
+  return payload.data.invoices
+}
+
+/**
+ * PMS often caps `limit` per response (e.g. 50) while `pagination.total` reflects all rows.
+ * Follow pages until every invoice row for the query is loaded.
+ */
+async function fetchPmsInvoicesAllPages(opts: {
+  patientId: string | null
+  status: string | null
+  pageSize: number
+  fresh: boolean
+}): Promise<PmsInvoiceListPayload> {
+  if (!PMS_INVOICES_API_KEY) {
+    return { status: "error", data: { invoices: [] }, pagination: { total: 0, page: 1, pages: 1, limit: 0 } }
+  }
+
+  const merged: unknown[] = []
+  let lastPagination: PmsInvoiceListPayload["pagination"] | undefined
+  const maxPages = 500
+  const pageSize = Math.min(200, Math.max(1, opts.pageSize))
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const url = new URL(PMS_INVOICES_API_BASE_URL)
+    url.searchParams.set("page", String(page))
+    url.searchParams.set("limit", String(pageSize))
+    if (opts.patientId) {
+      url.searchParams.set("patient_id", opts.patientId)
+    }
+    if (opts.status) {
+      url.searchParams.set("status", opts.status)
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        "x-api-key": PMS_INVOICES_API_KEY,
+        "Content-Type": "application/json",
+      },
+      next: { revalidate: opts.fresh ? 0 : 60 },
+    })
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "")
+      throw new Error(`PMS invoice list page ${page} failed: ${response.status} ${errText}`)
+    }
+
+    const payload = (await response.json()) as PmsInvoiceListPayload
+    lastPagination = payload.pagination
+    const chunk = parsePmsInvoiceChunk(payload)
+    merged.push(...chunk)
+
+    const total = lastPagination?.total
+    const pages = lastPagination?.pages
+
+    if (chunk.length === 0) {
+      break
+    }
+    if (typeof total === "number" && merged.length >= total) {
+      break
+    }
+    if (typeof pages === "number" && page >= pages) {
+      break
+    }
+    if (typeof total !== "number" && typeof pages !== "number" && chunk.length < pageSize) {
+      break
+    }
+  }
+
+  const total = lastPagination?.total ?? merged.length
+
+  return {
+    status: "success",
+    results: merged.length,
+    data: { invoices: merged },
+    pagination: {
+      limit: merged.length,
+      page: 1,
+      pages: 1,
+      total,
+    },
+  }
+}
+
 function isMissingInvoicesTableError(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -72,7 +164,9 @@ export async function GET(request: NextRequest) {
   const page = searchParams.get("page") || "1"
   const limit = searchParams.get("limit") || "10"
   const patientId = searchParams.get("patient_id")
+  const status = searchParams.get("status")
   const fresh = searchParams.get("fresh") === "1"
+  const allPages = searchParams.get("all_pages") === "1"
 
   if (!PMS_INVOICES_API_KEY) {
     return NextResponse.json(
@@ -86,11 +180,25 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    if (allPages) {
+      const pageSize = Math.min(200, Math.max(1, Number.parseInt(limit, 10) || 100))
+      const payload = await fetchPmsInvoicesAllPages({
+        patientId,
+        status,
+        pageSize,
+        fresh,
+      })
+      return NextResponse.json(payload, { headers })
+    }
+
     const url = new URL(PMS_INVOICES_API_BASE_URL)
     url.searchParams.set("page", page)
     url.searchParams.set("limit", limit)
     if (patientId) {
       url.searchParams.set("patient_id", patientId)
+    }
+    if (status) {
+      url.searchParams.set("status", status)
     }
 
     const response = await fetch(url.toString(), {
